@@ -5,7 +5,7 @@ A reference database for immunoglobulin and T-cell receptor **alleles**, **leade
 similarity search by name or sequence. It runs at **[airbabel.org](https://airbabel.org)**;
 this repository is its source (Python package `allele_server`).
 
-Scope today: **V, D, J and C coding alleles + AA + aliases** for 40+ species, with
+Scope today: **V, D, J and C coding alleles + AA + aliases** for 40 species, with
 **leaders** (spliced signal peptide) and **RSS** populated. AA and the protein UID remain
 V-only by design. Constant regions cover the immunoglobulin loci in their **secreted** form:
 heavy chains assembled from the domains IMGT publishes separately, light chains taken whole.

@@ -13,7 +13,7 @@ other databases can consume it for alias + sequence-similarity resolution.
 | 3 | UID | Deterministic: `SPECIES-CATEGORYCODE+base32(sha256)`; coding N=8, leader/RSS N=5 |
 | 4 | Protein UID | V-specific, derived from `aa_hash`: `HUMAN-VP-<base32[:6]>` (non-unique; groups synonyms) |
 | 5 | Ingestion | IMGT direct from IMGT/GENE-DB's bulk FASTA (`imgt_genedb`); OGRDB direct from its v2 API (`ingest/ogrdb.py`); stdlib HTTP, FASTA-first reader |
-| 6 | Scope | **V + D + J + C coding alleles + AA + aliases**, 40+ species, IG + TR; leaders + RSS populated. AA/protein UID stay V-only. C is the **secreted** form (IG only; TR constants deferred). (Was: V-only, human/mouse/rhesus, leaders/RSS deferred.) |
+| 6 | Scope | **V + D + J + C coding alleles + AA + aliases**, 40 species, IG + TR; leaders + RSS populated. AA/protein UID stay V-only. C is the **secreted** form (IG only; TR constants deferred). (Was: V-only, human/mouse/rhesus, leaders/RSS deferred.) |
 | 7 | Internal sets | HUSA (human) / MUSA (**rhesus macaque** curated set); MUSA aggregates KIMDB / RhGLDB+ / VRC / Guo, each credited as a first-class source |
 | 8 | Interop | AIRR field names + `AlleleDescription` view; species + sources as CURIEs |
 | 9 | Export | Full-dataset API export (`export.py` `EXPORT_ENABLED=True`); IMGT is CC BY 4.0, attribution required |
