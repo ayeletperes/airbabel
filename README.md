@@ -61,5 +61,8 @@ uv run allele-server                                   # serve API + UI at http:
 A curated-set path left unset is skipped; one set to a missing file stops the reload.
 Run the tests (needs the dev Postgres up): `uv run --extra dev pytest`.
 
-See [`CONVENTIONS.md`](CONVENTIONS.md) for the design conventions and locked decisions, and
-[`docs/ingestion.md`](docs/ingestion.md) for every ingest pass.
+For the design: [`docs/data-model.md`](docs/data-model.md) for the schema and how identity
+is keyed, [`docs/naming-schemes.md`](docs/naming-schemes.md) for what each naming scheme is
+and its citation, [`docs/similarity-precompute.md`](docs/similarity-precompute.md) for how
+identity is scored and cached, [`docs/source-policy.md`](docs/source-policy.md) for what it
+takes to add a source, and [`docs/ingestion.md`](docs/ingestion.md) for every ingest pass.

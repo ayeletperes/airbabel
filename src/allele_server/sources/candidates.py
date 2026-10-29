@@ -80,7 +80,7 @@ def curator(explicit: str | None = None) -> str:
     Raises:
         SourceError: if neither ``--by`` nor ``$AIRBABEL_CURATOR`` is set. There is no
             fallback to ``git config user.name``: an approval attributed to a guess is
-            worse than no approval (CONVENTIONS.md, "fail loudly, no silent fallbacks").
+            worse than no approval: fail loudly, never fall back silently.
     """
     name = (explicit or os.environ.get(_CURATOR_ENV) or "").strip()
     if not name:
