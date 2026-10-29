@@ -80,7 +80,13 @@ jobs:
       # from 2026-08-25, so the signal was already being ignored, which is worse
       # than not having it. `analysis/` is still linted, in the advisory job below.
       - name: ruff check
-        run: uv run --extra dev ruff check src/ tests/ scripts/ alembic/
+        # Lint whichever of these exist. This workflow is published to the public
+        # mirror (scripts/build-public-repo.sh ships .github/workflows), where the
+        # allowlist does not include scripts/ -- naming it unconditionally failed the
+        # mirror's CI with E902 while the private repo was green. Keep the list
+        # explicit rather than `ruff check .`, which would pull analysis/ into this
+        # required job; it is deliberately advisory in the job below.
+        run: uv run --extra dev ruff check $(ls -d src tests scripts alembic 2>/dev/null)
 
   lint-analysis:
     name: ruff, analysis (advisory)

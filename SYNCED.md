@@ -14,4 +14,4 @@ Not included: deployment configuration, internal planning material, curated data
 and caches. The dataset itself is downloadable from the API — see `DATA-README.md` and
 <https://airbabel.org/api/export>.
 
-Synced from `3af1d3ec4890` on 2026-10-29.
+Synced from `f2b41c8baaea` on 2026-10-29.
