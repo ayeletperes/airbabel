@@ -104,7 +104,6 @@ extend-exclude = [
     "analysis/notebooks",  # notebook builders embed notebook code (not source-width-limited)
     "scratch",
     "build",
-    "airrdb_cache",
     "ogrdb_cache",
     "imgt_crawl_cache",
     "ncbi_cache",

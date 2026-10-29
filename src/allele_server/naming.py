@@ -1,7 +1,7 @@
 """Allele name parsing and scheme detection across naming schemes.
 
-Ported from immunogenomic_db ``husa_core/naming.py`` so aliases bucket the same
-way in both databases. Names are labels, never keys; always carry the scheme.
+The same parsing as the HUSA curation pipeline (``husa_core``), so aliases bucket
+the same way in both. Names are labels, never keys; always carry the scheme.
 Parse into ``(segment, family, gene, allele, suffix)``, zero-pad the allele to
 two digits, preserve the original string verbatim.
 

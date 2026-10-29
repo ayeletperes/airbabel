@@ -1,7 +1,6 @@
 """NCBI Entrez (E-utilities) client for the NCBI xref enrichment pass.
 
-Ported from immunogenomic_db ``bridges/_ncbi_client.py`` onto stdlib ``urllib``
-(no new runtime dep; ingest-only). Same rails:
+Stdlib ``urllib`` only (no new runtime dep; ingest-only). Rails:
 
 * **Disk cache first** — every esearch/efetch body cached under
   ``cache_dir/<sha256(query)>.json``; re-runs are a no-op, bit-for-bit.

@@ -1,7 +1,7 @@
 """Sequence identity primitives: normalisation, hashing, ambiguity detection.
 
-Ported from immunogenomic_db ``husa_core/sequence.py`` so the two databases
-share one identity contract and can federate. Locked rules:
+The same identity contract as the HUSA curation pipeline (``husa_core``), so
+databases built on it federate. Locked rules:
 
     * Canonical hash = ``sha256(normalize(seq))`` as a hex digest.
     * Normalisation uppercases, strips gaps (``.`` ``-``) and stray whitespace,

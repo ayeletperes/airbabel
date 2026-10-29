@@ -41,7 +41,7 @@ _SHEETS = (
 
 # Flanking-padded variants (db_name carries a `_F<n>` tag): their sequence is the
 # coding allele plus genomic flanks, but the CODING is identical to the base
-# allele. Dropped to keep coding-only (matches immunogenomic_db's ki bridge).
+# allele. Dropped to keep coding-only.
 _FLANKING_RE = re.compile(r"_F\d+")
 
 

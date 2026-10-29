@@ -1,16 +1,16 @@
-# allele_server
+# AIRBabel
 
-A standalone reference database for immunoglobulin **alleles**, **leaders**, and **RSS** across
-species, with deterministic per-sequence identifiers ("iglabels"), alias resolution, and fast
-similarity search by name or sequence. A simpler, focused sibling of `immunogenomic_db` (no genomic
-or repertoire data); designed so `immunogenomic_db` and future databases can consume it.
+A reference database for immunoglobulin and T-cell receptor **alleles**, **leaders** and
+**RSS** across species, with deterministic per-sequence identifiers, alias resolution, and
+similarity search by name or sequence. It runs at **[airbabel.org](https://airbabel.org)**;
+this repository is its source (Python package `allele_server`).
 
-Scope today: **V, D, J and C coding alleles + AA + aliases**, across 30 species, with **leaders**
-(spliced signal peptide) and **RSS** populated. AA and the protein UID remain V-only by
-design. Constant regions cover the immunoglobulin loci in their **secreted** form — heavy
-chains assembled from the domains IMGT publishes separately, light chains taken whole; the
-membrane-bound form and the TR constants are not loaded. D alleles are loaded, but because they
-are very short their similarity is restricted to equal-length comparison (see below).
+Scope today: **V, D, J and C coding alleles + AA + aliases** for 40+ species, with
+**leaders** (spliced signal peptide) and **RSS** populated. AA and the protein UID remain
+V-only by design. Constant regions cover the immunoglobulin loci in their **secreted** form:
+heavy chains assembled from the domains IMGT publishes separately, light chains taken whole.
+The membrane-bound form and the TR constants are not loaded. D alleles are loaded, but
+because they are very short their similarity is restricted to equal-length comparison.
 
 ## What it does
 
@@ -30,40 +30,36 @@ are very short their similarity is restricted to equal-length comparison (see be
 - **Enriched aliases**: optional passes crawl IMGT's gene tables for **name iterations**
   (clone / former / literature names like `VH26`, `DP-75`, plus reference accessions + HGNC /
   NCBI-Gene xrefs) and **NCBI E-utilities** for the GenBank accession + NCBI Gene id per allele.
-- A **web UI** plus a **REST API** (`/docs`); a transport-agnostic query core (`queries.py`) leaves
-  room for an agent/MCP layer later (none in v1).
+- A **web UI**, a **REST API** (`/docs`) and an **MCP server** (`/mcp/`, with `--extra mcp`),
+  all over one transport-agnostic query core (`queries.py`).
 
 ## Data sources
 
 IMGT is downloaded directly from IMGT/GENE-DB (the bulk ReferenceSequences FASTA, all species);
-OGRDB directly from its v2 API.
-Internal curated sets (**HUSA** human, **MUSA** rhesus macaque) are layered on top. MUSA aggregates
-several underlying rhesus databases (KIMDB, RhGLDB+, VRC, Guo), each credited as a first-class
-source on the alleles it attests.
+OGRDB directly from its v2 API. Curated sets are layered on top: **HUSA** (human), **MUSA**
+(rhesus macaque, aggregating KIMDB, RhGLDB+, VRC and Guo, each credited as a first-class source on
+the alleles it attests) and **KIARVA**. Every stored record carries its source; the service
+aggregates and never adjudicates.
 
-> **Redistribution:** IMGT data may not be redistributed. v1 ships with **no bulk/by-source export**;
-> only per-record lookups and capped search. `export.py` keeps `EXPORT_ENABLED = False` and no route
-> imports it. **This must be legally verified before flipping that flag or any public release.**
+> **Data terms:** the code is AGPL-3.0 (`LICENSE`); the data has its own terms, per source.
+> IMGT and OGRDB are CC BY 4.0, so reuse requires attribution. See
+> [`DATA-README.md`](DATA-README.md) and [airbabel.org/sources](https://airbabel.org/sources)
+> for each source's licence and citation.
 
 ## Quickstart (dev)
 
 ```bash
-cp .env.example .env
+cp .env.example .env                                   # set HUSA_TABLE / MUSA_TABLE / KI_XLSX to load the curated sets
 docker compose -f docker-compose.dev.yml up -d        # Postgres on 127.0.0.1:5433
-uv sync                                                # core deps
+uv sync --extra ingest                                 # core + ingestion deps
 uv run alembic upgrade head                            # create schema
-uv sync --extra ingest                                 # ingestion deps
-uv run allele-ingest --fetch                           # download OGRDB, then load
-uv run allele-ingest --imgt-genedb                     # download + load IMGT (all species)
-#   ... or load a pre-fetched cache, plus internal sets:
-uv run allele-ingest --cache-dir ./ogrdb_cache \
-    --husa /path/to/husa.fasta --musa /path/to/musa.fasta
-# optional enrichment (network; cached; idempotent):
-uv run allele-ingest --enrich-only --imgt-names        # IMGT clone/alt names + accessions + xrefs
-uv run allele-ingest --enrich-only --ncbi-crawl        # NCBI accession + NCBI Gene per allele
+uv run allele-ingest --fetch                           # download OGRDB into ./ogrdb_cache
+uv run allele-ingest --reload                          # download IMGT, load every source, enrich
 uv run allele-server                                   # serve API + UI at http://127.0.0.1:8000
 ```
 
+A curated-set path left unset is skipped; one set to a missing file stops the reload.
 Run the tests (needs the dev Postgres up): `uv run --extra dev pytest`.
 
-See `CONVENTIONS.md` for the design conventions and locked decisions.
+See [`CONVENTIONS.md`](CONVENTIONS.md) for the design conventions and locked decisions, and
+[`docs/ingestion.md`](docs/ingestion.md) for every ingest pass.

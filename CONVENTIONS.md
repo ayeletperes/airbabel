@@ -1,8 +1,8 @@
-# allele_server: conventions
+# AIRBabel (`allele_server`): conventions
 
-A standalone reference DB for immunoglobulin **alleles, leaders, RSS** across species. Simpler,
-focused sibling of `immunogenomic_db` (no genomic/repertoire data); built so `immunogenomic_db` and
-future databases can consume it for alias + sequence-similarity resolution.
+A standalone reference DB for immunoglobulin and T-cell receptor **alleles, leaders, RSS** across
+species, served at airbabel.org. Reference data only (no genomic or repertoire data); built so
+other databases can consume it for alias + sequence-similarity resolution.
 
 ## Locked decisions
 
@@ -13,11 +13,11 @@ future databases can consume it for alias + sequence-similarity resolution.
 | 3 | UID | Deterministic: `SPECIES-CATEGORYCODE+base32(sha256)`; coding N=8, leader/RSS N=5 |
 | 4 | Protein UID | V-specific, derived from `aa_hash`: `HUMAN-VP-<base32[:6]>` (non-unique; groups synonyms) |
 | 5 | Ingestion | IMGT direct from IMGT/GENE-DB's bulk FASTA (`imgt_genedb`); OGRDB direct from its v2 API (`ingest/ogrdb.py`); stdlib HTTP, FASTA-first reader |
-| 6 | Scope | **V + D + J + C coding alleles + AA + aliases**, 30 species; leaders + RSS populated. AA/protein UID stay V-only. C is the **secreted** form (IG only; TR constants deferred). (Was: V-only, human/mouse/rhesus, leaders/RSS deferred.) |
+| 6 | Scope | **V + D + J + C coding alleles + AA + aliases**, 40+ species, IG + TR; leaders + RSS populated. AA/protein UID stay V-only. C is the **secreted** form (IG only; TR constants deferred). (Was: V-only, human/mouse/rhesus, leaders/RSS deferred.) |
 | 7 | Internal sets | HUSA (human) / MUSA (**rhesus macaque** curated set); MUSA aggregates KIMDB / RhGLDB+ / VRC / Guo, each credited as a first-class source |
 | 8 | Interop | AIRR field names + `AlleleDescription` view; species + sources as CURIEs |
 | 9 | Export | Full-dataset API export (`export.py` `EXPORT_ENABLED=True`); IMGT is CC BY 4.0, attribution required |
-| 10 | Agent | None in v1; query core (`queries.py`) is transport-agnostic so MCP drops in later |
+| 10 | Agent | MCP server (`mcp/`, `/mcp/`, `--extra mcp`), a thin read-only wrapper over the transport-agnostic query core (`queries.py`) |
 | 11 | Enrichment | Opt-in `--imgt-names` (crawl IMGT gene tables) + `--ncbi-crawl` (E-utilities); cached, idempotent |
 
 ## Identity rules (non-negotiable)
@@ -57,7 +57,8 @@ src/allele_server/
   ingest/ neighbors.py                                   precomputed similarity cache build (see docs/)
   queries.py                                             transport-agnostic core
   api/ app.py routes.py schemas.py web/templates/        REST + Jinja2 UI
-  export.py                                              gated; not wired in v1
+  mcp/ server.py                                         MCP over queries.py (read-only)
+  export.py                                              full-dataset export (enabled)
 alembic/versions/0001_initial_schema.py
 tests/
 ```
