@@ -1,0 +1,38 @@
+# AIRBabel
+
+> AIRBabel is a sequence-defined reference for immunoglobulin (IG) and T-cell receptor (TR) germline alleles (V, D, J and C segments), their leader sequences and recombination signal sequences (RSSs), across many species. Each distinct sequence has one stable, sequence-derived UID. Every name that IMGT, OGRDB, IUIS, VDJbase and other sources give that sequence is attached to it as a label, so an allele name from any source resolves to the same sequence.
+
+Use AIRBabel to answer: what is the sequence of an allele name (e.g. IGHV1-69*01), which names from different sources refer to the same sequence, whether two names are the same allele, which alleles are similar to a sequence, and where each name and record comes from. Names are labels; the sequence is the identity. Data is aggregated from its sources with attribution; AIRBabel does not adjudicate between them.
+
+## Record pages
+
+- [Allele record](https://airbabel.org/seq/HUMAN-VQLNRZF6P): `/seq/<UID>`, one page per sequence: species, locus, segment, functionality, nucleotide and (for V) amino-acid sequence, every name with its naming scheme and source, cross-references.
+- [Search](https://airbabel.org/?q=IGHV1-69*01&mode=auto&species=human): `/?q=<allele name, nucleotide or amino-acid sequence, or PMID>`.
+- RSS records are at `/rss/<UID>` and leader records at `/leader/<UID>`.
+- [Sitemap](https://airbabel.org/sitemap.xml): every record page.
+
+## REST API (JSON)
+
+- [Resolve a name or UID](https://airbabel.org/api/resolve?query=IGHV1-69*01): `GET /api/resolve?query=<name|uid>`; add `&view=airr` for an AIRR AlleleDescription.
+- `GET /api/sequences/<UID>`: a record by UID (supports `?view=airr`).
+- `GET /api/sequences/<UID>/aliases`: every name for the sequence, with its scheme.
+- `GET /api/search/name?q=<term>&species=<tag>`: fuzzy name search.
+- `POST /api/search/sequence` with `{"sequence": "..."}`: nucleotide similarity search.
+- `POST /api/search/aa` with `{"sequence_aa": "..."}`: amino-acid search.
+- [Version and dataset release](https://airbabel.org/version): software version, dataset digest and source versions, for citation.
+
+## MCP server (for AI assistants)
+
+- `https://airbabel.org/mcp/` (Streamable HTTP, public, no key). Tools: `resolve_allele`, `resolve_sequence`, `get_aliases`, `find_similar`, `get_cross_species_neighbors`. Rate-limited; the two similarity tools have a tighter limit. Setup: [Guide](https://airbabel.org/help#mcp).
+
+## Docs
+
+- [Guide and API reference](https://airbabel.org/help)
+- [Tutorial with a Python client](https://airbabel.org/tutorial)
+- [Examples of names that are ambiguous without the sequence](https://airbabel.org/examples)
+- [Sources, licences and citations](https://airbabel.org/sources)
+- [Coverage by species, locus and segment](https://airbabel.org/overview)
+
+## Licence
+
+IMGT data is CC BY 4.0; cite IMGT and the contributing sources listed at /sources on any reuse.

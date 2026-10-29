@@ -1,0 +1,36 @@
+{# Per-hit comparison fragment. For V, the alignment is produced by
+   receptor_utils.sequence_alignment.create_alignment (the shared tool VDJbase uses)
+   and shown verbatim in a <pre>: the query is the reference row, the hit shows only
+   its differences, with non-silent residue changes above the codon. For non-V there
+   is no IMGT numbering, so the substitutions are listed instead. Fetched on demand
+   when a hit is expanded (see the compare handler in app.py). #}
+<div class="cmp-box">
+  {# Concise summary line — the alignment (V) or the list below (non-V) shows the detail. #}
+  {% if diff.note %}
+    <span class="muted">{{ diff.note }}</span>
+  {% elif diff.n_subs == 0 %}
+    <span class="muted">identical nucleotide sequence over the compared length</span>
+  {% else %}
+    <span class="muted"><b>{{ "%.2f"|format(diff.identity * 100) }}%</b> identity &middot;
+      {{ diff.n_subs }} nt substitution{{ '' if diff.n_subs == 1 else 's' }} &middot;
+      <span class="cons-nonsyn">{{ diff.n_nonsyn }} non-synonymous</span>,
+      <span class="cons-syn">{{ diff.n_syn }} synonymous</span></span>
+  {% endif %}
+
+  {% if alignment %}
+  <p class="muted" style="margin:8px 0 2px">IMGT alignment (query = reference row); the hit shows
+    only its differences: identical codons <span class="mono">---</span>, changed bases in lower
+    case, non-synonymous residue changes shown above the codon.</p>
+  <pre class="aln-text">{{ alignment }}</pre>
+  {% elif diff.subs %}
+  {# Non-V (D/J/RSS/leader): no IMGT numbering, so list the substitutions. #}
+  <ul class="diff-list">
+  {% for s in diff.subs %}
+    <li>nt&nbsp;{{ s.pos }} <span class="mono">{{ s.from_nt }}&rarr;{{ s.to_nt }}</span>
+      {% if s.aa_from %}<span class="mono">{{ s.aa_from }}&rarr;{{ s.aa_to }}</span>
+        {% if s.synonymous %}<span class="cons-syn">syn</span>{% else %}<span class="cons-nonsyn">non-syn</span>{% endif %}{% endif %}
+    </li>
+  {% endfor %}
+  </ul>
+  {% endif %}
+</div>

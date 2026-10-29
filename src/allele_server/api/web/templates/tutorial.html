@@ -1,0 +1,199 @@
+{% extends "base.html" %}
+{% block description %}Tutorial for AIRBabel: worked questions and a runnable Python client for resolving IG and TR allele names, fetching sequences and finding similar alleles through the REST API.{% endblock %}
+{% block title %}Tutorial &middot; AIRBabel{% endblock %}
+{% block body %}
+<style>
+  .tut-intro { margin: 4px 0 18px; }
+  .tut-intro h1 { font-size: 22px; margin: 0 0 6px; letter-spacing: -.01em; }
+  .tut-intro .sub { color: var(--muted); font-size: 14.5px; max-width: 860px; margin: 0; }
+
+  .wf { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+        box-shadow: var(--shadow); padding: 16px 18px; margin-bottom: 15px; }
+  .wf > h2 { font-size: 16.5px; margin: 0 0 4px; letter-spacing: -.01em; }
+  .wf > h2 .n { display: inline-grid; place-items: center; width: 22px; height: 22px;
+        border-radius: 50%; background: var(--accent-soft); color: var(--accent-dark);
+        font-size: 12px; font-weight: 700; margin-right: 9px; vertical-align: 2px; }
+  .wf .why { color: var(--muted); font-size: 13.5px; margin: 0 0 12px; max-width: 860px; }
+  .wf .steps { margin: 0 0 12px; padding-left: 20px; font-size: 13.5px; }
+  .wf .steps li { margin: 5px 0; }
+  .wf .answer { background: var(--surface-alt); border-left: 3px solid var(--green);
+        border-radius: var(--radius-sm); padding: 10px 13px; font-size: 13.5px; margin: 0 0 12px; }
+  .wf .answer b { color: var(--fg); }
+  .wf .runrow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+  .wf .run { display: inline-block; padding: 7px 14px; border-radius: 8px; background: var(--accent);
+        color: #fff; font-size: 13px; font-weight: 600; text-decoration: none; }
+  .wf .run:hover { background: var(--accent-dark); text-decoration: none; }
+  .wf .run.alt { background: var(--surface); color: var(--fg); border: 1px solid var(--line-strong); }
+  .wf .run.alt:hover { border-color: var(--accent); color: var(--accent); background: var(--surface); }
+  .wf pre.cmd { margin: 0; }
+
+  .py-head { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 0 0 10px; }
+  .py-head h2 { margin: 0; font-size: 17px; }
+  .py-actions { margin-left: auto; display: flex; gap: 8px; }
+  .py-actions a, .py-actions button { padding: 7px 13px; border-radius: 8px; font-size: 12.5px;
+        font-weight: 600; cursor: pointer; text-decoration: none; border: 1px solid var(--line-strong);
+        background: var(--surface); color: var(--fg); font-family: inherit; }
+  .py-actions a:hover, .py-actions button:hover { border-color: var(--accent); color: var(--accent); }
+  pre.script { max-height: 560px; overflow: auto; }
+</style>
+
+<div class="tut-intro">
+  <h1>Tutorial</h1>
+  <p class="sub">Five worked examples using live AIRBabel records, each shown in the
+     browser and through the REST API. The page also provides a runnable Python client.
+     No account or API key is required.</p>
+</div>
+
+<div class="wf">
+  <h2><span class="n">1</span>Are these two names the same allele?</h2>
+  <p class="why">A name is a label, not an identifier. Two names can denote one sequence, and one
+     name can denote several unrelated sequences. Resolving both names to their <b>Server UID</b>,
+     a hash of the sequence, settles it: the same Server UID denotes the same normalized nucleotide sequence.</p>
+  <ol class="steps">
+    <li>Search each name in <b>Auto</b> mode, with the species set. An exact match jumps straight
+        to the record; without a species, a name several species reuse returns a picker instead.</li>
+    <li>Compare the <b>Server UID</b> at the top of each page, not the names.</li>
+  </ol>
+  <p class="answer"><b>IGHV1-69*01</b> and <b>IGHV1-69D*01</b> both resolve to
+     <a href="/seq/HUMAN-VQLNRZF6P">HUMAN-VQLNRZF6P</a>, one normalized nucleotide sequence with two IMGT
+     names. So do <b>IGKV1D-17*02</b> (a designation IMGT stopped using in 2015) and
+     <b>IGKV1-17*03</b>, both <a href="/seq/HUMAN-VACLUDJCT">HUMAN-VACLUDJCT</a>.
+     The converse also occurs: <b>IGHV1-69*01</b> is also a live name in chicken, gorilla,
+     mouse and rhesus, on <b>different sequences</b>, so an unscoped lookup must be told
+     which species you mean.</p>
+  <div class="runrow">
+    <a class="run" href="/?q=IGHV1-69*01&amp;mode=auto&amp;species=human">Resolve IGHV1-69*01</a>
+    <a class="run alt" href="/?q=IGHV1-69D*01&amp;mode=auto&amp;species=human">Resolve IGHV1-69D*01</a>
+    <a class="run alt" href="/?q=IGHV1-69*01&amp;mode=auto">The same name, unscoped</a>
+    <a class="run alt" href="/api/search/name?q=IGHV1-69*01&amp;exact=1">Every species using this name (JSON)</a>
+  </div>
+  <pre class="cmd"><span class="c"># one name -&gt; one record, scoped to a species</span>
+curl "<span class="host"></span>/api/resolve?query=IGHV1-69D*01&amp;species=human" | jq .record.native.uid
+<span class="c"># which species reuse this name, and on which sequences?</span>
+curl "<span class="host"></span>/api/search/name?q=IGHV1-69*01&amp;exact=1"</pre>
+</div>
+
+<div class="wf">
+  <h2><span class="n">2</span>What full allele contains this sequence fragment?</h2>
+  <p class="why">User-supplied sequences may be partial: primer-trimmed, assembled short of the ends, or copied
+     out of a figure. By default identity is scored over the <b>full</b> length, which penalises a
+     fragment for the part it does not cover. Turn on <b>partial match</b> to score over the
+     best-matching window instead, so a contained fragment resolves near 100%.</p>
+  <ol class="steps">
+    <li>Choose <b>Sequence</b> mode and paste the fragment; no name is needed.</li>
+    <li>Tick <b>Partial match</b>.</li>
+    <li>Read the <b>Match</b> column: <code>substring</code> means fully contained, no mismatches.</li>
+  </ol>
+  <p class="answer">A 57 nt fragment resolves at <b>1.000, matched by <code>substring</code></b>,
+     to <a href="/seq/HUMAN-VGRODEYPM">IGHV1-18*01</a> and its close relatives. Several alleles
+     contain it, all tied at 1.000, the expected result for a fragment of this length. The ranking
+     tells you what the read could be, not what it must be; paste more sequence to separate them.</p>
+  <div class="runrow">
+    <a class="run" href="/?q=CAGGTTCAGCTGGTGCAGTCTGGAGCTGAGGTGAAGAAGCCTGGGGCCTCAGTGAAG&amp;mode=sequence&amp;partial=1">Run this search</a>
+  </div>
+  <pre class="cmd">curl -X POST "<span class="host"></span>/api/search/sequence?partial=true" \
+  -H "content-type: application/json" \
+  -d '{"sequence": "CAGGTTCAGCTGGTGCAGTCTGGAGCTGAGGTGAAGAAGCCTGGGGCCTCAGTGAAG"}'</pre>
+</div>
+
+<div class="wf">
+  <h2><span class="n">3</span>What is the closest human allele to this mouse allele?</h2>
+  <p class="why">Allele names do not establish orthology across species; numbering schemes are
+     independent. Sequence identity provides a comparable measure across species, computed all-against-all between species
+     and cached, so the lookup is immediate.</p>
+  <ol class="steps">
+    <li>Open the mouse record and use <b>Find similar alleles</b>.</li>
+    <li>In the <b>species</b> picker choose the target species (or <b>All species</b>).</li>
+    <li>Lower the <b>minimum identity</b> threshold: cross-species neighbours sit well below the same-species range.</li>
+  </ol>
+  <p class="answer">Mouse <b>IGHV5-17*01</b> (<a href="/seq/MOUSE-V3GPCFPTO">MOUSE-V3GPCFPTO</a>) is
+     closest to human <b>IGHV3-48*01</b> at <b>88.2%</b> nucleotide identity, with a different
+     subgroup number in each species. Cross-species neighbours are served from the cache down to
+     85% identity.</p>
+  <div class="runrow">
+    <a class="run" href="/seq/MOUSE-V3GPCFPTO/similar?to_species=HUMAN&amp;min=0.8&amp;kind=nt" rel="nofollow">Closest human alleles</a>
+    <a class="run alt" href="/seq/MOUSE-V3GPCFPTO">The mouse record</a>
+  </div>
+  <pre class="cmd">curl "<span class="host"></span>/api/sequences/MOUSE-V3GPCFPTO/similar?to_species=human&amp;same_species=false&amp;min_identity=0.8"</pre>
+</div>
+
+<div class="wf">
+  <h2><span class="n">4</span>Which protein does this nucleotide allele call encode?</h2>
+  <p class="why">Two V alleles that differ by a silent substitution encode the identical protein.
+     For questions about the encoded receptor sequence, synonymous nucleotide differences should be
+     interpreted at the protein level. Every V allele carries a <b>protein UID</b> derived from its amino-acid hash, shared by
+     every allele that translates to the same V-REGION.</p>
+  <ol class="steps">
+    <li>Open the record and read <b>Protein UID</b> in the identity table.</li>
+    <li>Use <b>Find similar</b> with <b>amino acid</b> and a threshold of 99% to list the alleles
+        that share it.</li>
+    <li>Or paste the amino-acid sequence directly in <b>Amino acid</b> mode.</li>
+  </ol>
+  <p class="answer"><b>IGHV3-25*05</b> (<a href="/seq/HUMAN-VOST4CB5R">HUMAN-VOST4CB5R</a>) and
+     <b>IGHV3-25*03</b> (<a href="/seq/HUMAN-V3VFNK4GI">HUMAN-V3VFNK4GI</a>) differ at one
+     nucleotide. The substitution is silent, so both carry protein UID
+     <b>HUMAN-VP-VFECCW</b> and the amino-acid comparison returns <b>100%</b>.
+     Protein UIDs are V-only: D, J and C carry no translated sequence.</p>
+  <div class="runrow">
+    <a class="run" href="/seq/HUMAN-VOST4CB5R/similar?kind=aa&amp;min=0.99" rel="nofollow">Alleles encoding the same protein</a>
+    <a class="run alt" href="/seq/HUMAN-VOST4CB5R">The record</a>
+  </div>
+  <pre class="cmd">curl "<span class="host"></span>/api/sequences/HUMAN-VOST4CB5R/similar?kind=aa&amp;min_identity=0.999"</pre>
+</div>
+
+<div class="wf">
+  <h2><span class="n">5</span>Which alleles are supported by this PMID?</h2>
+  <p class="why">A record's reference list answers &ldquo;which papers cite this allele?&rdquo;. The
+     reverse question, given a paper, which AIRBabel allele records are linked to it, is what
+     you need when you are evaluating a claim or reproducing a reference set.</p>
+  <ol class="steps">
+    <li>Enter the PubMed ID in <b>PMID</b> mode (bare digits, <code>PMID:29163486</code>, or a
+        PubMed URL; <b>Auto</b> mode also recognises bare digits).</li>
+    <li>Read the <b>evidence tier</b> on each hit; the tiers are never summed into one
+        number.</li>
+  </ol>
+  <p class="answer">PMID <b>29163486</b> (Ramesh <i>et al.</i> 2017, the de novo rhesus macaque Ig
+     loci) is linked to hundreds of AIRBabel records, all at the <b>verified</b> tier, carried by the MUSA
+     rhesus set. Archived records are returned and flagged, because a paper citing a name
+     that has since been retired is exactly the case where the citation must still lead somewhere.</p>
+  <p class="answer" style="border-left-color: var(--amber)"><b>An empty result is not negative evidence.</b>
+     Citation coverage is partial: it comes either from a source that publishes references with its
+     records or from mining a paper's text and supplements. An empty result means AIRBabel holds no
+     citation linking that paper to an allele, not that the paper describes none.</p>
+  <div class="runrow">
+    <a class="run" href="/?q=29163486&amp;mode=pmid">Run this search</a>
+  </div>
+  <pre class="cmd">curl "<span class="host"></span>/api/pmid/29163486"</pre>
+</div>
+
+<h2 id="python" style="margin-top:30px">Use AIRBabel from Python</h2>
+<p class="sub" style="margin-bottom:14px">The example client is a single Python file using only the standard library; no installation,
+   dependency, or API key is required. Each function is independent. Run it as-is to see all
+   six calls answer against this instance.</p>
+
+<div class="wf">
+  <div class="py-head">
+    <h2 style="font-size:15px">airbabel_example.py</h2>
+    <div class="py-actions">
+      <button type="button" class="copy-btn" data-target="pyscript">Copy</button>
+      <a href="/tutorial/airbabel_example.py" download>Download</a>
+    </div>
+  </div>
+  <pre class="cmd" style="margin-bottom:12px"><span class="c"># against this instance</span>
+python airbabel_example.py <span class="host"></span></pre>
+  <pre class="script" id="pyscript">{{ script }}</pre>
+</div>
+
+<p class="hint">Every endpoint the script uses is documented in the
+   <a href="/help#api">API reference</a>, with the interactive
+   <a href="/docs">Swagger UI</a> and the raw <a href="/openapi.json">OpenAPI schema</a> alongside.
+   Bulk download of the whole dataset is at <a href="/api/export">/api/export</a>; attribution
+   terms and per-source citations are on <a href="/sources">Sources &amp; citations</a>.</p>
+
+<script>
+  (function () {
+    var o = window.location.origin, n = document.querySelectorAll(".host");
+    for (var i = 0; i < n.length; i++) n[i].textContent = o;
+  })();
+</script>
+{% endblock %}

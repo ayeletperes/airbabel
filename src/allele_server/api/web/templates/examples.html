@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block description %}Real cases where an allele name alone cannot identify an immunoglobulin or T-cell receptor allele: renamed, duplicated and cross-species names, resolved by sequence in AIRBabel.{% endblock %}
+{% block title %}Examples &middot; AIRBabel{% endblock %}
+{% block body %}
+<style>
+  .ex-intro { margin: 4px 0 18px; }
+  .ex-intro h1 { font-size: 22px; margin: 0 0 6px; letter-spacing: -.01em; }
+  .ex-intro .sub { color: var(--muted); font-size: 14.5px; max-width: 840px; margin: 0; }
+
+  .ex-card { background: var(--surface); border: 1px solid var(--line);
+             border-radius: var(--radius); box-shadow: var(--shadow);
+             padding: 16px 18px; margin-bottom: 14px; }
+  .ex-lede { font-size: 11px; text-transform: uppercase; letter-spacing: .06em;
+             color: var(--accent); font-weight: 600; margin: 0 0 4px; }
+  .ex-card h2 { font-size: 16.5px; margin: 0 0 8px; letter-spacing: -.01em; }
+  .ex-card .ex-note { color: var(--muted); font-size: 13.5px; margin: 0 0 12px; max-width: 840px; }
+
+  .ex-facts { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin-bottom: 12px; }
+  .ex-facts .nm { font-family: var(--mono); font-size: 12.5px; background: var(--surface-alt);
+                  border: 1px solid var(--line); border-radius: 6px; padding: 2px 8px; }
+  .ex-facts .nm.former { text-decoration: line-through; color: var(--faint); }
+  .ex-facts .flag { font-size: 11px; text-transform: uppercase; letter-spacing: .05em;
+                    padding: 2px 8px; border-radius: 20px; font-weight: 600;
+                    background: #fbeaea; color: #b3261e; border: 1px solid #f3c9c6; }
+  .ex-facts .sp { font-size: 12.5px; color: var(--muted); }
+  .ex-facts .seq { font-family: var(--mono); font-size: 11.5px; color: var(--muted);
+                   word-break: break-all; max-width: 100%; }
+
+  .ex-go { font-size: 13px; font-weight: 600; color: var(--accent); text-decoration: none; }
+  .ex-go:hover { text-decoration: underline; }
+  .ex-uid { font-family: var(--mono); font-size: 11.5px; color: var(--faint); margin-left: 8px; }
+</style>
+
+<div class="ex-intro">
+  <h1>Examples</h1>
+  <p class="sub">Every example below is a <b>real record</b> in this database. Together, these examples
+     illustrate a central principle: allele names can be <b>renamed</b>, <b>retired</b>, or no longer
+     present in a current source release; the same name can denote different sequences in different
+     species; and one sequence can carry several official names. The sequence defines identity, and
+     names are source-attributed labels attached to that identity.</p>
+</div>
+
+{% for e in examples %}
+<section class="ex-card">
+  {% if e.lede %}<p class="ex-lede">{{ e.lede }}</p>{% endif %}
+  <h2>{{ e.title }}</h2>
+  <p class="ex-note">{{ e.notice }}</p>
+
+  <div class="ex-facts">
+    {% if e.kind == "search" %}
+      <span class="seq">{{ e.query }}</span>
+    {% elif e.kind == "pmid" %}
+      <a class="nm" href="{{ e.pmid_url }}" rel="noopener" target="_blank">PMID {{ e.pmid }}</a>
+      <span class="sp">{{ e.n_hits }} alleles</span>
+      {% if e.species %}<span class="sp">{{ e.species }}</span>{% endif %}
+      {% for nm in e.names %}<span class="nm">{{ nm }}</span>{% endfor %}
+    {% else %}
+      {% if e.species %}<span class="sp">{{ e.species }}</span>{% endif %}
+      {% for nm in e.names %}<span class="nm">{{ nm }}</span>{% endfor %}
+      {% for nm, rel in e.former %}<span class="nm former" title="last IMGT release {{ rel }}">{{ nm }}</span>{% endfor %}
+      {% if e.archived %}<span class="flag">archived</span>{% endif %}
+      {% if e.retired %}<span class="flag">retired</span>{% endif %}
+      {% if e.id == "same-protein" %}
+        {% for sib in e.protein_siblings %}
+          <span class="sp">same AA sequence as</span>
+          <a class="nm" href="/seq/{{ sib.uid }}">{{ sib.name }}</a>
+        {% endfor %}
+        {% if e.protein_uid %}<span class="nm">{{ e.protein_uid }}</span>{% endif %}
+      {% endif %}
+      {% if e.n_refs %}<span class="sp">{{ e.n_refs }} references</span>{% endif %}
+    {% endif %}
+  </div>
+
+  <a class="ex-go" href="{{ e.url }}">{% if e.kind in ("search", "pmid") %}Run this search &rarr;{% else %}Open the record &rarr;{% endif %}</a>
+  {% if e.kind not in ("search", "pmid") %}<span class="ex-uid">{{ e.uid }}</span>{% endif %}
+</section>
+{% endfor %}
+
+{% if not examples %}
+<p class="muted">No examples resolve against the current dataset.</p>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,123 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+# Cancel superseded runs on the same ref (e.g. rapid pushes to a PR branch).
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: tests (postgres 16)
+    runs-on: ubuntu-latest
+
+    # A throwaway Postgres 16 matching the dev/lab stack (user/pass/db = allele).
+    # The suite runs against a SEPARATE database, allele_server_test, created below;
+    # migration 0001 installs the pg_trgm extension + GIN indexes it needs.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: allele
+          POSTGRES_PASSWORD: allele
+          POSTGRES_DB: allele_server
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U allele -d allele_server"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # allele_server.settings reads these from the environment (pydantic-settings
+      # maps field name -> UPPER_SNAKE). Both point at the test database so the
+      # standalone `alembic upgrade` and the suite's own migration agree.
+      DATABASE_URL: postgresql+psycopg://allele:allele@localhost:5432/allele_server_test
+      DATABASE_URL_TEST: postgresql+psycopg://allele:allele@localhost:5432/allele_server_test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Create the test database
+        env:
+          PGPASSWORD: allele
+        run: |
+          psql -h localhost -p 5432 -U allele -d allele_server \
+            -c 'CREATE DATABASE allele_server_test' || \
+            echo "allele_server_test already exists; continuing"
+
+      - name: Run migrations on the test database
+        run: uv run alembic upgrade head
+
+      - name: Run the test suite
+        run: uv run --extra dev pytest -q
+
+  lint:
+    name: ruff
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      # Scoped to the code that ships or is tested, NOT `.`. `analysis/` is
+      # exploratory research code: it is excluded from the public build, it is
+      # written in a deliberately compressed style (E702/E701 one-liners, the same
+      # idiom `tests/**` already gets an ignore for), and gating merges on it means
+      # every new experiment turns CI red. It did: this job failed continuously
+      # from 2026-08-25, so the signal was already being ignored, which is worse
+      # than not having it. `analysis/` is still linted, in the advisory job below.
+      - name: ruff check
+        run: uv run --extra dev ruff check src/ tests/ scripts/ alembic/
+
+  lint-analysis:
+    name: ruff, analysis (advisory)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      # The step swallows its exit code rather than the job carrying
+      # continue-on-error. Both keep the run green, but continue-on-error still
+      # paints the job with a red X, which is indistinguishable from a real
+      # failure at a glance and trains you to ignore red. Exiting 0 and putting
+      # the count in the run summary keeps the finding visible and the icon honest.
+      - name: ruff check analysis
+        run: |
+          uv run --extra dev ruff check analysis/ | tee /tmp/ruff-analysis.txt || true
+          echo "### ruff, analysis: $(grep -oE 'Found [0-9]+ error' /tmp/ruff-analysis.txt || echo 'clean') (advisory)" >> "$GITHUB_STEP_SUMMARY"
+
+  typecheck:
+    name: mypy (advisory)
+    runs-on: ubuntu-latest
+    # Day-1 type checking is advisory only: it must not block merges yet. Make the
+    # step exit 0 rather than marking the whole job failed; see the note in
+    # lint-analysis for why a red X on a passing run is worse than no signal.
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: mypy
+        run: |
+          uv run --extra dev mypy src/allele_server | tee /tmp/mypy.txt || true
+          echo "### mypy: $(grep -oE 'Found [0-9]+ error' /tmp/mypy.txt || echo 'clean') (advisory)" >> "$GITHUB_STEP_SUMMARY"

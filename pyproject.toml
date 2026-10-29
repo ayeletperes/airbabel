@@ -1,0 +1,150 @@
+[project]
+name = "allele-server"
+version = "0.1.0"
+description = "Standalone allele / leader / RSS reference database with deterministic UIDs, alias resolution, and sequence similarity search."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "AGPL-3.0-only" }
+authors = [{ name = "Ayelet Peres", email = "aperes7@gmail.com" }]
+
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "sqlalchemy>=2.0",
+    "alembic>=1.13",
+    "psycopg[binary]>=3.2",
+    "pydantic>=2.7",
+    "pydantic-settings>=2.3",
+    "jinja2>=3.1",
+    "python-multipart>=0.0.9",
+    "rapidfuzz>=3.9",
+    # IMGT-gapped numbering for the diff-with-consequence / alignment view. Public
+    # PyPI package; it also
+    # supplies the standard IMGT V reference to align against.
+    "receptor-utils>=0.0.44",
+]
+
+[project.optional-dependencies]
+# Ingestion: the IMGT gene-table crawler parses HTML with BeautifulSoup, the KI
+# table is xlsx, and GENElect needs requests. IMGT and OGRDB themselves are fetched
+# with the stdlib. The query server imports none of these, so they stay an extra.
+ingest = ["beautifulsoup4>=4.12", "openpyxl>=3.1", "numpy>=2.0",
+          # imgt_genedb.py does `from requests import get` for the GENElect
+          # queries (it needs verify=False for IMGT's TLS cert).
+          "requests>=2.32"]
+# Building the precomputed similarity cache (`ingest/neighbors.py`, which imports
+# numpy for the rapidfuzz cdist matrix). Its own extra so a deployment can rebuild
+# the cache without the rest of the ingest stack.
+#
+# Not in the base dependencies: the query server reads the cache and never builds it.
+neighbors = ["numpy>=2.0"]
+# MCP server (src/allele_server/mcp): a thin, read-only wrapper over queries.py.
+# The MCP SDK pulls in Starlette/anyio/etc., which the query server and CI do not
+# need, so it stays its own extra, the same reasoning as `ingest`. Install with
+# `uv sync --extra mcp` to run `allele-mcp` (or serve /mcp from the main app).
+mcp = ["mcp>=2.0"]
+dev = ["pytest>=8.2", "pytest-asyncio>=0.23", "httpx>=0.27", "ruff>=0.6", "mypy>=1.10",
+       # tests/test_imgt_genedb.py and test_imgt_crawl.py import these directly. They
+       # arrived transitively via the ingest extra, so the suite passed locally and
+       # died at collection in CI, which installs only --extra dev.
+       "requests>=2.32", "beautifulsoup4>=4.12",
+       "openpyxl>=3.1", "numpy>=2.0"]
+# Exploratory cross-species embedding analysis (analysis/ scripts, not the server).
+# Lean, CPU-only tier: extraction, the Phase-0 simulation, identity->MDS/k-mer
+# baselines, the evaluation harness, and figures. Kept out of base + CI like `ingest`.
+# The heavy protein/nucleotide language models (ESM C, VESM, AMPLIFY, NTv3) live in a
+# separate `analysis-esm` extra installed only on the GPU box, so the lab/CI never pull
+# torch. See analysis/README.md and docs plan.
+analysis = [
+    "numpy>=2.0",
+    "scikit-learn>=1.5",
+    "pandas>=2.2",
+    "pyarrow>=17.0",
+    "umap-learn>=0.5",
+    "matplotlib>=3.9",
+    "python-igraph>=0.11",
+    "jupyterlab>=4.2",
+    "ipykernel>=6.29",
+    # allele_sequence_space.ipynb fans its per-sample stability loop out over cores
+    # with joblib, and is executed headless on McCleary through nbclient.
+    "joblib>=1.4",
+    "nbclient>=0.10",
+    "nbformat>=5.10",
+    "tqdm>=4.66",
+]
+analysis-esm = ["torch>=2.3", "esm>=3.1", "transformers>=4.44"]
+
+[project.scripts]
+allele-server = "allele_server.api.app:main"
+allele-ingest = "allele_server.ingest.cli:main"
+allele-sources = "allele_server.sources.cli:main"
+allele-mcp = "allele_server.mcp.server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/allele_server"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+# Generated / vendored / cache trees never get linted. .venv, scratch, and the
+# data caches are already git-ignored but listed here so `ruff check .` is
+# deterministic regardless of the working tree.
+extend-exclude = [
+    ".claude",   # agent worktrees: whole copies of the repo, not project source
+    ".venv",
+    "*.ipynb",             # exploratory notebooks are not linted as source
+    "analysis/notebooks",  # notebook builders embed notebook code (not source-width-limited)
+    "scratch",
+    "build",
+    "airrdb_cache",
+    "ogrdb_cache",
+    "imgt_crawl_cache",
+    "ncbi_cache",
+    "imgt_history",
+    "literature_cache",
+    "literature_supp_cache",
+]
+
+[tool.ruff.lint]
+# Conservative day-1 rule set: pycodestyle errors (E), pyflakes (F), import
+# sorting (I). No opinionated reformatting or docstring rules yet.
+select = ["E", "F", "I"]
+
+[tool.ruff.lint.per-file-ignores]
+# Pre-existing long lines / import layout in modules this hardening pass is not
+# allowed to reformat. These are silenced per-file rather than reformatted so the
+# diff stays surgical; drop an entry once its module is cleaned up on its own.
+"src/allele_server/species.py" = ["E501"]      # wide species data-table rows
+"src/allele_server/queries.py" = ["E501", "F401", "I001"]
+"src/allele_server/api/schemas.py" = ["E501"]
+"src/allele_server/api/app.py" = ["I001"]
+"src/allele_server/ingest/cli.py" = ["E501"]
+"src/allele_server/ingest/ogrdb.py" = ["E501"]
+"src/allele_server/ingest/neighbors.py" = ["I001"]
+# matplotlib.use("Agg") must precede `import matplotlib.pyplot`, which splits the
+# import block; and `evaluate` is a sibling-script import, not a package module.
+"analysis/figures.py" = ["I001", "E402"]
+# sys.path.insert precedes a sibling-script import (`evaluate`) mixed with a package
+# import (`allele_server`), which the import sorter cannot group; deliberate.
+"analysis/asc_compare.py" = ["I001", "E402"]
+"analysis/benchmark.py" = ["I001", "E402"]
+"analysis/asc_benchmark.py" = ["I001", "E402"]
+"analysis/figure_knn_case.py" = ["I001", "E402"]
+"src/allele_server/ingest/imgt_history.py" = ["I001"]
+"src/allele_server/ingest/imgt_crawl.py" = ["F841"]
+# Tabular example/metadata rows: wrapping them hurts more than the long line does.
+"src/allele_server/examples_meta.py" = ["E501"]
+"src/allele_server/sources_meta.py" = ["E501"]
+# `session.add(x); session.flush()` is the deliberate seeding idiom throughout the suite.
+"tests/**" = ["E702"]
+# Migration 0001 is a frozen literal-DDL baseline. Reformatting it is exactly what it
+# exists to prevent, so its long CREATE TABLE lines stay as written.
+"alembic/versions/0001_initial_schema.py" = ["E501"]

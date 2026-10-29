@@ -1,0 +1,135 @@
+{% import "_charts.html" as charts %}
+{% if results is not none %}
+  <div class="results">
+  <p class="result-count"><b>{{ results.count }}</b> result{{ '' if results.count == 1 else 's' }}{% if results.capped %}
+     <span class="cap-note" title="Showing only the top {{ results.count }} by % identity; more sequences may match. Narrow your query or raise the min-identity threshold to see the closest ones.">(top {{ results.count }} shown; more may match)</span>{% endif %}
+     {% if shown_query is defined and shown_query %}for query
+       <code>{{ shown_query | truncate(60, True) }}</code>{% endif %}</p>
+
+  {% if facets and facets.total %}
+  <div class="res-summary">
+    {% if not (mode is defined and mode == "name") %}{{ charts.species_strip(facets) }}{% endif %}
+    <div class="facet-chips" aria-label="filter by species / locus">
+      {% for s in facets.by_species %}
+        <button type="button" class="chip" data-facet="species" data-value="{{ s.key }}">
+          <span class="chip-dot" style="background: {{ charts.species_color(s.key) }}"></span>{{ s.label }} <b>{{ s.count }}</b></button>
+      {% endfor %}
+      {% if facets.by_locus | length > 1 %}
+        {% for l in facets.by_locus %}
+          <button type="button" class="chip chip-locus" data-facet="locus" data-value="{{ l.key }}">{{ l.key }} <b>{{ l.count }}</b></button>
+        {% endfor %}
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  {# What the Match column means. Collapsed, because it is reference material a
+     returning user does not need, and open one click away for a first-time one who
+     otherwise has to guess whether "substring" is better or worse than "similar".
+     Kept next to the tags rather than only on /help, where nobody reads it mid-task. #}
+  {% if results.hits %}
+  <details class="match-key">
+    <summary>What do these match types mean?</summary>
+    <dl>
+      <dt>exact</dt><dd>The query sequence and the stored sequence are <b>identical</b> after
+        normalisation; same hash, so the same allele, whatever either is called.</dd>
+      <dt>substring</dt><dd>One sequence is <b>fully contained</b> in the other: your query is a
+        fragment of this allele, or this allele is a fragment of your query. No mismatches.</dd>
+      <dt>similar</dt><dd>Neither exact nor contained: ranked by <b>% identity</b>
+        (<a href="/help#similarity">how it is computed</a>). Read the Identity column with it.</dd>
+      <dt>name</dt><dd>Matched on a <b>label</b>, not on sequence. A name match says nothing about
+        the sequence; the same name denotes different sequences in different species.</dd>
+      <dt>cached</dt><dd>Served from the precomputed neighbour cache. Same identity calculation,
+        computed ahead of time.</dd>
+      <dt>protein_uid</dt><dd>Matched a <b>protein</b> UID: these V alleles differ in nucleotide
+        sequence but translate to the <b>same amino-acid sequence</b>.</dd>
+      <dt>superseded</dt><dd>Not a match type but a record status: IMGT has since published this
+        allele at a different extent. The tag links to the current record.</dd>
+    </dl>
+  </details>
+  <div class="res-toolbar">
+    <input type="text" class="res-filter" placeholder="filter results…" aria-label="filter results">
+    <span class="res-count muted"></span>
+  </div>
+  {% endif %}
+
+  {# Nothing current matched, but the name does match a record we hold. Saying so
+     beats silence: an archived record is skipped on purpose, not missing. #}
+  {% for am in results.archived_matches %}
+  <p class="notice">
+    {% if am.superseded_by %}
+      <b>{{ am.name }}</b> is a current allele; IMGT publishes it as
+      <a href="/seq/{{ am.superseded_by }}"><span class="mono">{{ am.superseded_by }}</span></a>{% if am.superseded_by_length %} ({{ am.superseded_by_length }} nt){% endif %}.
+      Your query matched an <b>earlier record</b> of the same allele,
+      <a href="/seq/{{ am.uid }}"><span class="mono">{{ am.uid }}</span></a>{% if am.first_seen %}, current in IMGT releases {{ am.first_seen }}{% if am.last_seen and am.last_seen != am.first_seen %}&ndash;{{ am.last_seen }}{% endif %}{% endif %}{% if am.superseded_relation == 'extends' %}, which the current record contains{% elif am.superseded_relation == 'trims' %}, which contains the current record{% endif %}.
+      Earlier sequence extents are deferred from search results so the current record is returned.
+    {% else %}
+      No <b>current</b> allele is named <b>{{ am.name }}</b>. It is in our archive as
+      <a href="/seq/{{ am.uid }}"><span class="mono">{{ am.uid }}</span></a>{% if am.first_seen %}, present in IMGT releases {{ am.first_seen }}{% if am.last_seen and am.last_seen != am.first_seen %}&ndash;{{ am.last_seen }}{% endif %}{% endif %},
+      and no current source publishes it. Archived records are deferred from search and coverage counts but remain resolvable for literature follow-up.
+    {% endif %}
+  </p>
+  {% endfor %}
+
+  {# On a similarity query (seed_uid set) each hit is a comparison against the
+     seed sequence: offer a per-hit, load-on-demand diff + IMGT alignment. #}
+  {% set has_compare = (seed_uid is defined and seed_uid) %}
+  {% set show_length = show_identity | default(false) %}
+  {% set ncols = 7 + (1 if show_identity | default(false) else 0) + (1 if show_length else 0) + (1 if has_compare else 0) %}
+  <div class="table-wrap">
+  <table class="res-table">
+    <thead><tr>
+      <th class="sortable" data-sort="name">Server&nbsp;UID</th>
+      <th class="sortable" data-sort="species">Species</th>
+      <th>Locus</th><th>Type</th>
+      <th>Match</th>
+      {% if show_identity | default(false) %}<th class="sortable" data-sort="score" data-sort-type="num">Identity</th>{% endif %}
+      {% if show_length %}<th class="sortable" data-sort="length" data-sort-type="num" title="Sequence length in nucleotides. Hits that differ in length from the query are flagged — those are the ones excluded from the conservation logo above.">Length</th>{% endif %}
+      <th>Find similar</th>
+      {% if has_compare %}<th>Compare</th>{% endif %}
+      <th>Allele names</th>
+    </tr></thead>
+    <tbody>
+    {% for h in results.hits %}
+      {% set pct = (h.score * 100) | round(1) %}
+      {% set typ = h.category if (h.category and h.category != 'coding') else (h.sequence_type or '') %}
+      {# UID is the identifier we show; all official/source allele names live in the names column. #}
+      {% set names = ([h.label] if h.label else []) + (h.aliases | reject("equalto", h.label) | list) %}
+      {% set len_diff = (seed_length is defined and seed_length and h.length and h.length != seed_length) %}
+      <tr data-uid="{{ h.uid }}" data-species="{{ h.species }}" data-locus="{{ h.locus or '' }}" data-type="{{ typ }}"
+          data-score="{{ h.score }}" data-name="{{ h.uid }}" data-length="{{ h.length or 0 }}"
+          data-text="{{ (h.uid ~ ' ' ~ (names | join(' ')) ~ ' ' ~ h.species) | lower }}">
+        <td><a href="/seq/{{ h.uid }}"><span class="uid" title="Allele Server identifier we mint from the sequence, not an official allele name"><b>{{ h.uid }}</b></span></a></td>
+        <td>{{ h.species }}{% if reciprocal_uids is defined and h.uid in reciprocal_uids %}<span class="rbh-badge" title="Reciprocal best hit: this hit is the query's nearest in its species, and the query is its nearest back in the query's species. A soft, sequence-based orthology hint — NOT a curated orthology call.">RBH</span>{% endif %}</td>
+        <td>{{ h.locus or "" }}</td>
+        <td>{{ typ }}</td>
+        <td>{% if h.matched_by %}<span class="match-tag">{{ h.matched_by }}</span>{% endif %}{% if h.superseded_by %} <a href="/seq/{{ h.superseded_by }}" class="match-tag" style="background:#fff4e5;color:#8a5300" title="IMGT has since published this allele at a different extent; this record is the earlier one. Click for the current record.">superseded</a>{% endif %}</td>
+        {% if show_identity | default(false) %}<td>
+          <span class="ident">
+            <span class="val">{{ pct }}%</span>
+            <span class="meter"><span style="width: {{ pct }}%"></span></span>
+          </span>
+        </td>{% endif %}
+        {% if show_length %}<td>{% if h.length %}{{ h.length }}&nbsp;nt{% if len_diff %} <span class="len-diff" title="Differs in length from the query ({{ seed_length }} nt); excluded from the conservation logo above (differing-length sequences are not aligned there).">{{ '+' if h.length > seed_length else '' }}{{ h.length - seed_length }}&nbsp;nt</span>{% endif %}{% else %}<span class="muted">—</span>{% endif %}</td>{% endif %}
+        <td>
+          <span class="actions">
+            <a href="/seq/{{ h.uid }}/similar?kind=nt&min=0.85&back={{ back_url | urlencode }}" rel="nofollow">nt</a>
+            {# AA is V-coding only: D, J and C carry no sequence_aa, and leader/RSS
+               are not translated either. Offering "aa" on those rows led to an
+               empty protein-similarity page that read as "no similar proteins"
+               rather than "there is no protein here". #}
+            {% if h.sequence_type == "V" and h.category in (none, "coding") %}
+            <a href="/seq/{{ h.uid }}/similar?kind=aa&min=0.85&back={{ back_url | urlencode }}" rel="nofollow">aa</a>
+            {% endif %}
+          </span>
+        </td>
+        {% if has_compare %}<td>{% if h.uid != seed_uid %}<button type="button" class="cmp-toggle" aria-expanded="false" data-cmp-url="/seq/{{ seed_uid }}/compare/{{ h.uid }}">diff &amp; align ▾</button>{% endif %}</td>{% endif %}
+        <td class="othernames">{% if names %}<b class="nm" title="{{ names[0] }}">{{ names[0] }}</b>{% if names | length > 1 %} <button type="button" class="more" data-all="{{ names | join(', ') }}" title="{{ names | join(', ') }}">+{{ names | length - 1 }} more</button>{% endif %}{% else %}<span class="muted">none</span>{% endif %}</td>
+      </tr>
+      {% if has_compare and h.uid != seed_uid %}<tr class="cmp-row" data-for="{{ h.uid }}" hidden><td colspan="{{ ncols }}"><div class="cmp-target muted">…</div></td></tr>{% endif %}
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  </div>
+{% endif %}

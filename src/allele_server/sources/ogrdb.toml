@@ -1,0 +1,44 @@
+schema_version = 1
+
+slug = "ogrdb"
+name = "OGRDB"
+label = "OGRDB"
+aliases = ["AIRR-C", "airrc", "Open Germline Receptor Database"]
+role = "external"
+description = """\
+The AIRR Community's Open Germline Receptor Database of curated, evidence-backed \
+inferred germline sets."""
+homepage_url = "https://ogrdb.airr-community.org"
+curie_prefix = "OGRDB"
+# No per-set permalink is exposed, so this is a landing page rather than a template.
+curie_url_template = "https://ogrdb.airr-community.org/germline_sets"
+
+[licence]
+status = "declared"
+name = "CC BY 4.0"
+url = "https://creativecommons.org/licenses/by/4.0/"
+redistributable = true
+note = "Published by the AIRR Community under CC BY 4.0."
+
+[citation]
+status = "verified"
+text = """\
+Lees W, Busse CE, Corcoran M, Ohlin M, Scheepers C, Matsen FA, et al. OGRDB: a reference \
+database of inferred immune receptor genes. Nucleic Acids Research. 2020;48(D1):D964-D970."""
+doi = "10.1093/nar/gkz822"
+
+[scope]
+loci = ["IGH", "IGK", "IGL"]
+segments = ["V"]
+categories = ["coding"]
+
+[ingest]
+module = "allele_server.ingest.ogrdb"
+published = true
+auto_update = true
+
+[approval]
+candidate = "manual:ogrdb"
+approved_by = "Ayelet Peres"
+approved_at = 2026-07-29T00:00:00Z
+note = "Pre-existing source, retro-approved during the source-policy migration. Citation resolved from the OGRDB paper (Nucleic Acids Res 2020), closing a TODO(citation)."

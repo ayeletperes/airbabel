@@ -1,0 +1,578 @@
+{% extends "base.html" %}
+{% import "_charts.html" as charts %}
+{% block title %}{% if q %}{{ q | truncate(48, true) }} &middot; search &middot; AIRBabel{% else %}AIRBabel &middot; IG and TR germline allele reference: names, sequences, species{% endif %}{% endblock %}
+{# A result page is one of endless query strings over the same records; the
+   records themselves are indexed at /seq/<uid>, so keep result pages out. #}
+{% block robots %}{% if q %}<meta name="robots" content="noindex, follow">{% endif %}{% endblock %}
+{% block canonical %}{% if not q %}{{ super() }}{% endif %}{% endblock %}
+{% block body %}
+<style>
+  .search-intro { margin: 4px 0 18px; }
+  .search-intro h1 { font-size: 22px; margin: 0 0 6px; letter-spacing: -.01em; }
+  .search-intro .sub { color: var(--muted); font-size: 14.5px; max-width: 760px; margin: 0; }
+
+  .panel { background: var(--surface); border: 1px solid var(--line);
+           border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px; margin-bottom: 14px; }
+
+  /* mode tabs (segmented control) */
+  .modes { display: inline-flex; flex-wrap: wrap; gap: 2px; background: var(--surface-alt);
+           border: 1px solid var(--line); border-radius: 8px; padding: 3px; margin-bottom: 12px; }
+  .modes label { padding: 6px 13px; border-radius: 6px; font-size: 13.5px; color: var(--muted);
+                 cursor: pointer; user-select: none; white-space: nowrap; line-height: 1.4; }
+  .modes label:hover { color: var(--fg); }
+  .modes label input { position: absolute; opacity: 0; width: 0; height: 0; }
+  .modes label:has(input:checked) { background: var(--surface); color: var(--accent);
+                 font-weight: 600; box-shadow: var(--shadow); }
+
+  .search-row { display: flex; gap: 10px; align-items: stretch; flex-wrap: wrap; }
+  .search-row input[type=text] { flex: 1 1 340px; min-width: 0; padding: 11px 13px;
+        border: 1px solid var(--line-strong); border-radius: var(--radius-sm); font-size: 15px; color: var(--fg); }
+  .search-row input[type=text]:focus { outline: none; border-color: var(--accent);
+        box-shadow: 0 0 0 3px var(--accent-soft); }
+  .search-row select { height: 100%; padding: 0 12px; border: 1px solid var(--line-strong);
+        border-radius: var(--radius-sm); background: var(--surface); font-size: 14px; color: var(--fg); cursor: pointer; }
+  .search-row button { align-self: stretch; padding: 0 22px; border: 1px solid var(--accent);
+        background: var(--accent); color: #fff; font-size: 14px; font-weight: 600;
+        border-radius: var(--radius-sm); cursor: pointer; }
+  /* each control wrapper stretches to the row height so the select fills it (matches input/button) */
+  .ctl, .cat-control, .kind-control, .min-control { align-self: stretch; }
+  .search-row button:hover { background: var(--accent-dark); }
+
+  /* each option travels with its ⓘ help */
+  .ctl { display: inline-flex; align-items: center; gap: 5px; }
+  .min-control, .cat-control, .kind-control { display: none; align-items: center; gap: 5px; }
+
+  /* the % threshold only makes sense for the identity modes; hide it otherwise */
+  .panel:has(.modes input[value="similar"]:checked) .min-control,
+  .panel:has(.modes input[value="sequence"]:checked) .min-control,
+  .panel:has(.modes input[value="aa"]:checked) .min-control { display: inline-flex; }
+
+  /* the coding/leader/rss selector only applies when pasting a sequence */
+  .panel:has(.modes input[value="sequence"]:checked) .cat-control,
+  .panel:has(.modes input[value="similar"]:checked) .cat-control { display: inline-flex; }
+
+  /* nt / aa similarity choice, only in Similar mode */
+  .panel:has(.modes input[value="similar"]:checked) .kind-control { display: inline-flex; }
+
+  /* Species picker is a multi-select (Ctrl/Cmd-click). size="1" keeps it the height
+     of the other controls in the row; it scrolls, and selecting none means "all". */
+  .sp-multi { height: 100%; min-width: 9.5em; overflow-y: auto; }
+  .sp-multi option { padding: 1px 4px; }
+
+  /* PMID coverage caveat: only while PMID mode is selected, and before searching */
+  .pmid-advice { display: none; margin: 10px 0 0; padding: 9px 12px; font-size: 13px;
+        line-height: 1.5; color: var(--muted); background: var(--surface-alt);
+        border-left: 3px solid var(--accent); border-radius: var(--radius-sm); }
+  .panel:has(.modes input[value="pmid"]:checked) .pmid-advice { display: block; }
+
+  /* partial-match option: only meaningful for sequence / amino-acid / similar */
+  .opts-row { display: none; align-items: center; gap: 7px; }
+  .panel:has(.modes input[value="sequence"]:checked) .opts-row,
+  .panel:has(.modes input[value="aa"]:checked) .opts-row,
+  .panel:has(.modes input[value="similar"]:checked) .opts-row { display: flex; }
+
+  /* advanced filters: collapsed by default, apply to every mode */
+  .adv { margin-top: 9px; }
+  .adv > summary { cursor: pointer; font-size: 12.5px; color: var(--muted);
+    list-style: none; display: inline-flex; align-items: center; gap: 5px; user-select: none; }
+  .adv > summary::-webkit-details-marker { display: none; }
+  .adv > summary::before { content: "›"; display: inline-block; transition: transform .15s;
+    font-size: 15px; line-height: 1; }
+  .adv[open] > summary::before { transform: rotate(90deg); }
+  .adv > summary:hover { color: var(--fg); }
+  .adv-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; margin: 9px 2px 0; }
+  .adv-row label.f { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; color: var(--muted); }
+  .adv-row select { padding: 5px 8px; font-size: 13px; }
+  .adv-badge { display: none; margin-left: 6px; font-size: 10px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .04em; color: var(--accent); }
+  .adv:has(select[name=functional] option[value="1"]:checked) .adv-badge,
+  .adv:has(select[name=functional] option[value="0"]:checked) .adv-badge,
+  .adv:has(select[name=source] option:not([value=""]):checked) .adv-badge { display: inline; }
+
+  .mode-hint { font-size: 13px; color: var(--muted); margin: 11px 2px 0; }
+  .mode-hint b { color: var(--fg); font-weight: 600; }
+
+  .meta-line { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center;
+        font-size: 13px; color: var(--muted); margin: 0 2px 8px; }
+  .meta-line b { color: var(--fg); font-variant-numeric: tabular-nums; }
+  .meta-line a { color: var(--muted); }
+  .meta-line a:hover { color: var(--accent); }
+  .meta-line .sep { color: var(--line-strong); }
+  .examples { font-size: 13px; color: var(--muted); margin: 2px; }
+  .examples a { display: inline-block; margin-right: 8px; padding: 3px 0; }  /* 24px tap target */
+  .examples code { font-size: 12.5px; }
+
+  .overview { margin: 6px 0 16px; }
+  .ov-head { display: flex; flex-wrap: wrap; gap: 8px 26px; margin-bottom: 12px; }
+  .ov-head span { font-size: 13px; color: var(--muted); }
+  .ov-head b { color: var(--fg); font-size: 18px; font-variant-numeric: tabular-nums;
+        margin-right: 5px; letter-spacing: -.01em; }
+  .ov-table { width: 100%; }
+  .ov-table td.num, .ov-table .barnum { font-variant-numeric: tabular-nums; }
+  .ov-table .barcell { white-space: nowrap; }
+  .ov-table .bar { display: inline-block; vertical-align: middle; width: 150px; height: 9px;
+        background: var(--surface-alt); border-radius: 5px; overflow: hidden; margin-right: 9px; }
+  .ov-table .bar > span { display: block; height: 100%; background: var(--accent); border-radius: 5px; }
+  .ov-table .barnum { font-weight: 600; }
+  .ov-note { font-size: 12px; color: var(--muted); margin: 9px 2px 0; }
+
+  .choose p { margin: 0 0 10px; font-size: 14px; }
+  .choose-row { display: flex; flex-wrap: wrap; gap: 10px; }
+  .choose-btn { display: inline-flex; gap: 8px; align-items: baseline; padding: 9px 14px;
+     border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--surface);
+     font-size: 14px; font-weight: 600; color: var(--fg); text-decoration: none; }
+  .choose-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .choose-btn .muted { font-weight: 400; font-size: 12.5px; }
+  .choose-cell { display: inline-flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+  .choose-alt { font-size: 12.5px; color: var(--muted); padding-left: 2px; }
+  .choose-alt:hover { color: var(--accent); }
+
+  /* preview / news panel */
+  .preview { padding: 0; overflow: hidden; }
+  .preview-head { display: flex; gap: 10px; align-items: center; padding: 12px 16px;
+     border-bottom: 1px solid var(--line); background: var(--surface-alt); }
+  .badge-preview { flex: none; font-size: 11px; font-weight: 700; text-transform: uppercase;
+     letter-spacing: .05em; color: #fff; background: var(--amber); padding: 3px 9px; border-radius: 20px; }
+  .preview-head p { margin: 0; font-size: 13.5px; color: var(--fg); }
+  .preview-body { padding: 15px 16px; }
+  .preview-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 30px; }
+  .preview-cols h3, .changelog h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .06em;
+     color: var(--muted); font-weight: 700; margin: 0 0 8px; }
+  .preview-cols ul, .changelog ul { margin: 0; padding-left: 18px; font-size: 13.5px; color: var(--fg); }
+  .preview-cols li, .changelog li { margin: 4px 0; }
+  .preview-cols li::marker { color: var(--faint); }
+  .changelog { border-top: 1px solid var(--line); margin-top: 15px; padding-top: 14px; }
+  .cl-entry { display: flex; gap: 14px; }
+  .cl-date { flex: none; font: 12.5px/1.7 var(--mono); color: var(--faint);
+     font-variant-numeric: tabular-nums; }
+
+  @media (max-width: 600px) {
+    .preview-cols { grid-template-columns: 1fr; }
+    .cl-entry { flex-direction: column; gap: 3px; }
+    .search-row { flex-direction: column; align-items: stretch; }
+    .search-row input[type=text], .search-row select, .search-row button { width: 100%; }
+    .search-row select, .search-row button { padding: 11px 13px; }
+    .modes { display: flex; width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .search-intro h1 { font-size: 19px; }
+  }
+
+  /* ---------- landing hero (light, search-first) ---------- */
+  .hero-band { margin: -28px calc(-50vw + 50%) 22px; position: relative; overflow: hidden;
+    background: var(--surface); border-bottom: 1px solid var(--line); box-shadow: inset 0 3px 0 var(--accent); }
+  .hero-band .seqtex { position: absolute; inset: 0; opacity: .05; font-family: var(--mono); font-size: 14px;
+    line-height: 20px; letter-spacing: 2px; color: var(--accent); white-space: pre; overflow: hidden;
+    transform: rotate(-4deg) scale(1.3); pointer-events: none; user-select: none; }
+  .hero-band .inner { position: relative; max-width: 1080px; margin: 0 auto; padding: 40px 24px 28px; }
+  .hero-band h1 { font-size: 36px; line-height: 1.1; letter-spacing: -.025em; margin: 0 0 10px; color: var(--fg); font-weight: 800; }
+  .hero-band h1 .hl { color: var(--accent); }
+  .hero-band .htag { font-size: 16px; color: var(--muted); max-width: 64ch; margin: 0; }
+  .hero-band .htag b { color: var(--fg); }
+  .ribbon { display: flex; flex-wrap: wrap; gap: 6px 28px; margin: 20px 2px 0; }
+  .ribbon span { font-size: 13px; color: var(--muted); }
+  .ribbon b { color: var(--fg); font-family: var(--mono); font-size: 19px; font-weight: 600; margin-right: 6px; letter-spacing: -.01em; }
+
+  /* ---------- landing action cards + news ---------- */
+  .home-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1.15fr; gap: 15px; margin: 22px 0 0; }
+  .acard { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+    box-shadow: var(--shadow); padding: 18px; display: flex; flex-direction: column; }
+  .badge { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; margin-bottom: 12px; }
+  .badge svg { width: 22px; height: 22px; }
+  .b-green { background: var(--green-soft); color: var(--green); }
+  .b-amber { background: var(--amber-soft); color: var(--amber); }
+  .b-blue { background: var(--blue-soft); color: var(--blue); }
+  .acard h4 { margin: 0 0 5px; font-size: 15.5px; }
+  .acard p { margin: 0 0 14px; color: var(--muted); font-size: 13px; flex: 1; }
+  .acard .go { align-self: flex-start; padding: 8px 15px; border-radius: 8px; font-weight: 700; font-size: 13px; color: #fff; }
+  .go.green { background: var(--green); } .go.amber { background: var(--amber); } .go.blue { background: var(--blue); }
+  .acard.news h4 { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; font-size: 15px; }
+  .acard.news h4 svg { width: 17px; height: 17px; color: var(--teal); }
+  .news .item { padding: 8px 0; border-bottom: 1px solid var(--line); }
+  .news .item:last-child { border-bottom: 0; }
+  .news .item a { font-weight: 600; font-size: 13px; display: block; }
+  .news .item time { font-size: 11px; color: var(--faint); font-family: var(--mono); }
+  .newtag { display: inline-block; font-size: 9.5px; font-family: var(--mono); text-transform: uppercase;
+    letter-spacing: .04em; padding: 1px 6px; border-radius: 5px; margin-left: 6px; background: var(--green-soft); color: var(--green); }
+
+  .lstrip { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 22px; }
+  .lchip { display: flex; align-items: baseline; gap: 8px; background: var(--surface); border: 1px solid var(--line);
+    border-radius: 10px; padding: 9px 14px; box-shadow: var(--shadow); text-decoration: none; color: var(--fg); }
+  .lchip:hover { border-color: var(--accent); text-decoration: none; }
+  .lchip .l { font-weight: 700; font-size: 12.5px; }
+  .lchip .n { font-family: var(--mono); font-size: 16px; color: var(--teal-dark); font-weight: 600; }
+  .lchip.ig .l { color: var(--accent); } .lchip.tr .l { color: var(--alt); }
+
+  /* access / licence / version line under the hero ribbon */
+  .access { margin: 14px 2px 0; font-size: 12.5px; color: var(--muted); line-height: 1.7; }
+  .access b { color: var(--fg); }
+  .access .sep { color: var(--line-strong); margin: 0 5px; }
+
+  /* "try an example" chips under the search form */
+  .tryex { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin: 12px 2px 4px; }
+  .tryex-l { font-size: 12.5px; color: var(--muted); margin-right: 2px; }
+  .trychip { display: inline-flex; align-items: baseline; gap: 7px; padding: 5px 11px;
+    border: 1px solid var(--line-strong); border-radius: 20px; background: var(--surface);
+    font-size: 12.5px; color: var(--fg); text-decoration: none; white-space: nowrap; }
+  .trychip:hover { border-color: var(--accent); color: var(--accent); text-decoration: none; }
+  .trychip .w { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--faint); }
+  .trychip:hover .w { color: var(--accent); }
+
+
+  /* the API call behind the result on screen */
+  .apibox { margin: 14px 0 4px; }
+  .apibox > summary { cursor: pointer; font-size: 12.5px; color: var(--muted); list-style: none;
+    display: inline-flex; align-items: center; gap: 5px; user-select: none; }
+  .apibox > summary::-webkit-details-marker { display: none; }
+  .apibox > summary::before { content: "\203A"; display: inline-block; transition: transform .15s;
+    font-size: 15px; line-height: 1; }
+  .apibox[open] > summary::before { transform: rotate(90deg); }
+  .apibox > summary:hover { color: var(--fg); }
+  .apibox pre { margin: 9px 0 0; }
+
+  .about { margin-top: 26px; background: var(--surface-alt); border: 1px solid var(--line);
+    border-radius: var(--radius); padding: 20px 22px; }
+  .about h3 { margin: 0 0 8px; font-size: 16px; }
+  .about p { margin: 0 0 9px; color: var(--muted); font-size: 13.5px; max-width: 82ch; }
+  @media (max-width: 820px) { .hero-band .inner { grid-template-columns: 1fr; } .home-grid { grid-template-columns: 1fr 1fr; } }
+</style>
+
+{% if results is none %}
+<div class="hero-band">
+  <div class="seqtex">CAGGTGCAGCTGGTGCAGTCTGGGGCTGAGGTGAAGAAGCCTGGGTCCTCGGTGAAGGTCTCCTGCAAGGCTTCTGGA
+TRBV20-1  IGHV1-69  CAGGTCACCTTGAGGGAGTCTGGTCCTGCGCTGGTGAAACCCACACAGACCCTCACACTG
+IGKV IGLV TRAV   ACGT GATTCGAGTC   QVQLVQSGAEVKKPGSSVKVSCKAS   IGHV3-23*01  TRGV9*01
+CAGGTTCAGCTGGTGCAGTCTGGAGCTGAGGTGAAGAAGCCTGGGGCCTCAGTGAAGGTCTCCTGCAAGGCTTCTGGA
+GGGGCTGAGGTG  TRDV2  IGHV4-34  CAGGTGCAGCTACAGCAGTGGGGCGCAGGACTGTTGAAGCCTTCGGAG</div>
+  <div class="inner">
+    <h1>One sequence-defined identity. <span class="hl">Every recorded name.</span></h1>
+    <p class="htag"><b>{{ stats.segments | join(", ") }}</b> immunoglobulin and T-cell receptor allele sequences. Resolve recorded names from contributing sources
+       to one canonical germline identity{% if stats %} across {{ stats.species | length }} species{% endif %}.
+       Names are labels; the sequence is identity.</p>
+    {% if stats %}
+    <div class="ribbon">
+      {% for s in stats.segments %}<span><b>{{ "{:,}".format(stats.by_segment.get(s, 0)) }}</b>{{ s }} alleles</span>{% endfor %}
+      <span><b>{{ stats.species | length }}</b>species</span>
+      <span><b>{{ stats.all_loci | length if stats.all_loci else 0 }}</b>loci</span>
+      <span><b>{{ "{:,}".format(stats.leader) }}</b>leaders</span>
+      <span><b>{{ "{:,}".format(stats.rss) }}</b>RSS</span>
+      <span><b>{{ stats.sources | length }}</b>sources</span>
+    </div>
+    {% endif %}
+    {# Access, provenance and version, on the page a first-time visitor lands on rather
+       than only on /sources. The release is a stamped build (dataset_releases), not a
+       load timestamp: it names the data AND the distance computation, and both are
+       digested so two deployments can be compared by one string. An unstamped
+       instance says so instead of quoting its software version as a data version. #}
+    <p class="access">
+      <b>Public website and REST API</b> &middot; no registration or API key required
+      <span class="sep">|</span>
+      open data access
+      {% if release %}<span class="sep">|</span>
+        release <b title="Stamped build: {{ release.details.digested.sequences if release.details.digested else '' }} sequences, content digest {{ release.content_digest[:12] }}…, similarity digest {{ release.similarity_digest[:12] }}…">{{ release.release }}</b>
+        <a href="/sources#release">what is in it</a>
+      {% elif stats and stats.last_loaded %}<span class="sep">|</span>
+        {# No stamped release on this instance. Say "beta" rather than "(unversioned)":
+           both are true, but one describes the service and the other reads as a defect
+           in it. The load date still carries the provenance a reader needs to cite. #}
+        <b>beta</b> &middot; data last loaded
+        <b>{{ stats.last_loaded.strftime("%Y-%m-%d") }}</b>
+      {% endif %}
+      {% if stats %}<span class="sep">|</span>
+        <a href="/sources">{{ stats.sources | length }} sources, licences &amp; citations</a>{% endif %}
+      <span class="sep">|</span> <a href="/tutorial">tutorial</a>
+      {% if feedback_url %}<span class="sep">|</span>
+        <a href="{{ feedback_url }}" target="_blank" rel="noopener noreferrer">report a problem</a>{% endif %}
+    </p>
+  </div>
+</div>
+{% endif %}
+
+{% set mode_hints = {
+  "auto": "allele name, UID, or a sequence; picks the best match",
+  "name": "fuzzy allele-name search",
+  "sequence": "nucleotide similarity (exact, sub/superstring, edit-distance)",
+  "aa": "amino-acid (protein) similarity",
+  "similar": "find sequences similar to the allele you name (or a sequence you paste), ranked by % identity",
+  "pmid": "a PubMed ID -> AIRBabel records linked to that publication, with evidence tiers"} %}
+
+{% macro tip(t) %}<span class="info" data-tip="{{ t }}" tabindex="0" aria-label="{{ t }}">i</span>{%- endmacro %}
+
+<form class="panel" method="get" action="/">
+  <div class="modes">
+    {% for m, lbl in [("auto","Auto"),("name","Name"),("sequence","Sequence"),("aa","Amino acid"),("similar","Similar"),("pmid","PMID")] %}
+      <label title="{{ mode_hints[m] }}">{{ lbl }}<input type="radio" name="mode" value="{{ m }}"
+             {% if m == (mode or 'auto') %}checked{% endif %}></label>
+      {#- the ⓘ sits outside the label so clicking it does not select the mode -#}
+      {% if m == "pmid" %}{{ tip("Enter a PubMed ID to retrieve allele records in AIRBabel that are
+        linked to that publication. Accepted formats are bare digits (29163486), PMID:29163486, or a
+        PubMed URL. Each hit reports an evidence tier: verified (a curator or GenBank cross-reference),
+        sequence (the paper's text or supplement contains that exact sequence), or name only (the paper
+        mentions the name; a lead, since the same name denotes different sequences in other species). Coverage is
+        partial, so no result means AIRBabel holds no citation for that paper, not that it describes no
+        alleles.") }}{% endif %}
+    {% endfor %}
+  </div>
+  {# Shown by CSS the moment PMID is selected, before anything is searched: the
+     limitation is about what the *database* holds, so it has to be readable before a
+     user reads an empty result as a fact about the paper. #}
+  <p class="pmid-advice">
+    <b>Coverage is partial.</b> Citations arrive two ways: a source publishes them with its
+    records, or AIRBabel mines a paper's full text and supplements. Neither is exhaustive; most of
+    what is loaded today comes from curated sets that carry their own references. An empty
+    result therefore means <b>AIRBabel holds no citation linking that paper to an allele</b>, not
+    that the paper describes none. Treat a linked record as evidence within AIRBabel and an empty result as absence of recorded linkage.
+  </p>
+  <div class="search-row">
+    <input type="text" id="q" name="q" value="{{ q }}"
+           placeholder="e.g. IGHV1-69*01, a Server UID, a nt / AA sequence, or a PubMed ID">
+    {# Not the autofocus attribute: Chrome records no Largest Contentful Paint on a
+       page that autofocuses, so the landing page had no LCP and no Lighthouse
+       performance score. Focusing after load keeps it, and skipping touch screens
+       stops phones from opening the keyboard on arrival. #}
+    <script>addEventListener("load", function () {
+      if (matchMedia("(pointer: fine)").matches) document.getElementById("q").focus();
+    });</script>
+    <span class="ctl">
+      {# "All species" is first so it is reachable without scrolling, and because a
+         plain (non-Ctrl) click in a multi-select replaces the whole selection, it
+         un-picks everything in one click; the way back from a dozen chosen species. #}
+      <select name="species" multiple size="1" class="sp-multi"
+              title="All species, or Ctrl/Cmd-click to pick several">
+        <option value="*" {% if not species or "*" in species %}selected{% endif %}>All species</option>
+        {% for s in species_options %}
+          <option value="{{ s.tag }}" {% if s.tag in species %}selected{% endif %}>{{ s.label or s.tag }}</option>
+        {% endfor %}
+      </select>{{ tip("Restrict results to one species, or use Ctrl, or Cmd on macOS, to select several. A
+        multi-species selection is what restricts a similarity search to just those species.
+        Click “All species” (or select nothing) to search them all; a plain click there also
+        clears a long selection in one go. The species= URL parameter still accepts a
+        comma-separated list (human,rhesus), so existing links keep working.") }}
+    </span>
+    <span class="cat-control">
+      <select name="cat">
+        {% for c, lbl in [("coding","Coding allele"),("leader","Leader"),("rss","RSS")] %}
+          <option value="{{ c }}" {% if c == (cat or 'coding') %}selected{% endif %}>{{ lbl }}</option>
+        {% endfor %}
+      </select>{{ tip("Search target: coding allele sequences, leader signal-peptide coding sequences, or recombination signal sequences (RSS).") }}
+    </span>
+    <span class="kind-control">
+      <select name="kind">
+        {% for k, lbl in [("nt","nucleotide"),("aa","amino acid")] %}
+          <option value="{{ k }}" {% if k == (kind or 'nt') %}selected{% endif %}>{{ lbl }}</option>
+        {% endfor %}
+      </select>{{ tip("Compare by nucleotide or by amino-acid (protein) sequence.") }}
+    </span>
+    <span class="min-control">
+      <select name="min">
+        {% for v, lbl in [(0.99,"≥99%"),(0.97,"≥97%"),(0.95,"≥95%"),(0.90,"≥90%"),(0.80,"≥80%"),(0.0,"any %")] %}
+          <option value="{{ v }}" {% if (v - (min if min is not none else 0.95)) | abs < 0.001 %}selected{% endif %}>{{ lbl }}</option>
+        {% endfor %}
+      </select>{{ tip("Only show matches at or above this % identity.") }}
+    </span>
+    <button type="submit">Search</button>
+  </div>
+  <div class="opts-row">
+    <label class="partial-opt"><input type="checkbox" name="partial" value="1" {% if partial %}checked{% endif %}> Partial&nbsp;match</label>
+    {{ tip("For an incomplete / truncated sequence: score identity over the best-matching region of each allele, so a fragment fully contained in an allele scores ~100%. Off (default) = identity over the full length.") }}
+  </div>
+  <details class="adv" {% if functional or source %}open{% endif %}>
+    <summary>Advanced filters<span class="adv-badge">active</span></summary>
+    <div class="adv-row">
+      <label class="f">Functionality
+        <select name="functional">
+          {% for v, lbl in [("","Any"),("1","Functional"),("0","Non-functional")] %}
+            <option value="{{ v }}" {% if v == (functional or '') %}selected{% endif %}>{{ lbl }}</option>
+          {% endfor %}
+      </select>{{ tip("Functionality filter: functional, AIRR F; open reading frame (ORF) or pseudogene; or any status, including unknown.") }}
+      </label>
+      <label class="f">Source
+        <select name="source">
+          <option value="">Any source</option>
+          {% for s in source_options %}
+            <option value="{{ s }}" {% if s == source %}selected{% endif %}>{{ s }}</option>
+          {% endfor %}
+        </select>{{ tip("Keep only alleles contributed (named or recorded) by this source.") }}
+      </label>
+    </div>
+  </details>
+  <p class="mode-hint" id="mode-hint"><b>{{ (mode or 'auto') | capitalize }}</b>: {{ mode_hints.get(mode or 'auto') }}</p>
+</form>
+
+{# Real inputs, one click each: they set both the query and the mode (and the
+   partial flag where the example needs it), so a first-time visitor can see every
+   kind of question this service answers without knowing an allele name. #}
+<div class="tryex">
+  <span class="tryex-l">Try an example:</span>
+  {% for ex in search_examples %}
+    <a class="trychip" href="{{ ex.url }}" title="{{ ex.note }}"><span class="w">{{ ex.what }}</span>{{ ex.label }}</a>
+  {% endfor %}
+</div>
+
+<script>
+(function () {
+  // Placeholder + hint follow the selected mode, so the example matches the tab.
+  var PH = {
+    auto:     "e.g. IGHV1-69*01, a Server UID, or a nt / AA sequence",
+    name:     "an allele name, e.g. IGHV1-69*01",
+    sequence: "paste a nucleotide sequence, e.g. CAGGTGCAGCTG…",
+    aa:       "paste an amino-acid sequence, e.g. QVQLVQSGAEVKK…",
+    similar:  "an allele name (IGHV1-69*01) or a pasted sequence to compare"
+  };
+  var HINT = {{ mode_hints | tojson }};
+  var q = document.getElementById("q"), hint = document.getElementById("mode-hint");
+  function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+  function apply(m) {
+    if (q && PH[m]) q.placeholder = PH[m];
+    if (hint && HINT[m]) hint.innerHTML = "<b>" + cap(m) + "</b>: " + HINT[m];
+  }
+  document.querySelectorAll('input[name=mode]').forEach(function (r) {
+    r.addEventListener("change", function () { apply(this.value); });
+    if (r.checked) apply(r.value);
+  });
+})();
+</script>
+
+{% if results is none %}
+  <p class="examples">
+    <a href="/tutorial">Tutorial: five worked examples &rarr;</a>
+    <a href="/examples">Why names are not identifiers &rarr;</a>
+    <a href="/help">Guide &amp; API &rarr;</a>
+  </p>
+  {% if stats %}
+  {% if stats.all_loci %}
+  <h2>Alleles by locus</h2>
+  <div class="lstrip">
+    {% for l in stats.all_loci %}
+      <a class="lchip {{ 'tr' if l.startswith('TR') else 'ig' }}" href="/overview" title="See the full per-species breakdown"><span class="l">{{ l }}</span><span class="n">{{ "{:,}".format(stats.locus_all_totals.get(l, 0)) }}</span></a>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {# A landing page for a lookup tool has one job: get you to a result. The
+     capability table and the download reference moved to the Guide (/help#adds),
+     and the hand-maintained changelog was removed outright -- it had gone stale
+     (it still advertised 26 species and TCR V across 19 while the database held
+     40), which is what a changelog kept by hand in a template does. Release
+     history belongs with the stamped dataset releases on /sources#release. #}
+  <div class="about">
+    <h3>About AIRBabel</h3>
+    <p>AIRBabel aggregates immunoglobulin and T-cell receptor allele reference data from IMGT,
+       OGRDB and curated sets. Records are identified by <b>sequence</b> rather than by name, so a
+       name from any contributing source resolves to one canonical germline identity carrying its
+       aliases, leader, RSS and cross-species neighbours. It complements the primary databases and
+       does not adjudicate nomenclature.</p>
+    <p style="margin-bottom:4px">Data: IMGT (CC&nbsp;BY&nbsp;4.0), OGRDB and published sources, each
+       credited on <a href="/sources">Sources &amp; citations</a>.
+       <a href="/help#adds">What AIRBabel adds &rarr;</a> &middot;
+       <a href="/api/export">Download the dataset &rarr;</a></p>
+  </div>
+  {% endif %}
+
+{% endif %}
+
+{% if error %}<span class="notice err">{{ error }}</span>{% endif %}
+{% if multi_species %}
+  <span class="notice">This name matches more than one species; the sequences differ.
+     See the <b>Species</b> column and open the record you mean.</span>
+{% endif %}
+
+{% if choices %}
+<div class="panel choose">
+  <p>{{ choices_msg }}</p>
+  <div class="choose-row">
+    {% for c in choices %}
+      <span class="choose-cell">
+        <a class="choose-btn" href="{{ c.href }}">{{ c.species|capitalize }}
+           <span class="muted">{{ c.uid }}</span></a>
+        <a class="choose-alt" href="/seq/{{ c.uid }}">&rarr; allele page</a>
+      </span>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% if pmid_result %}
+<div class="results">
+  <p class="result-count">
+    <b>{{ pmid_result.count }}</b> allele{{ '' if pmid_result.count == 1 else 's' }}
+    linked to <a href="{{ pmid_result.url }}" target="_blank" rel="noopener">PMID {{ pmid_result.pmid }}</a>{% if pmid_result.title %}: {{ pmid_result.title }}{% endif %}{% if pmid_result.capped %}
+    <span class="cap-note">(top {{ pmid_result.hits | length }} shown)</span>{% endif %}
+  </p>
+  {% if pmid_result.count or pmid_result.n_name or pmid_result.n_name_unanchored %}
+  {# The tiers are reported apart, never summed: a mined name-only lead is a weaker
+     claim than a curator-verified cross-reference, and one total would hide that. #}
+  <p class="muted">
+    Evidence:
+    {% if pmid_result.n_verified %}<span class="match-tag" title="Curator-provided or from a GenBank cross-reference.">verified {{ pmid_result.n_verified }}</span>{% endif %}
+    {% if pmid_result.n_sequence %}<span class="match-tag" title="The paper's full text or a supplementary file contains this exact sequence (hash match).">sequence {{ pmid_result.n_sequence }}</span>{% endif %}
+    {% if names and pmid_result.n_name %}<span class="match-tag" title="Unverified: the paper mentions the name only, in a species and locus its own sequence evidence supports. A lead, not proof.">name only {{ pmid_result.n_name }}</span>{% endif %}
+    {% if not names and (pmid_result.n_name or pmid_result.n_name_unanchored) %}<a href="/?q={{ pmid_result.pmid }}&amp;mode=pmid&amp;names=1" class="muted" title="A name-only link means the paper contains the string, not necessarily the allele: the same name denotes different sequences in other species. Hidden by default.">{{ pmid_result.n_name + pmid_result.n_name_unanchored }} name-only link{{ '' if pmid_result.n_name + pmid_result.n_name_unanchored == 1 else 's' }} hidden</a>{% endif %}
+    {% if names and pmid_result.n_name_unanchored %}<span class="muted" title="Dropped: their species or locus does not match what the paper's own sequence evidence shows.">{{ pmid_result.n_name_unanchored }} inconsistent name link{{ '' if pmid_result.n_name_unanchored == 1 else 's' }} dropped</span>{% endif %}
+  </p>
+  {% if pmid_result.count %}
+  <div class="table-wrap">
+  <table class="res-table">
+    <thead><tr><th>Server&nbsp;UID</th><th>Species</th><th>Locus</th><th>Type</th>
+      <th>Evidence</th><th>Allele name</th></tr></thead>
+    <tbody>
+    {% for h in pmid_result.hits %}
+      <tr>
+        <td><a href="/seq/{{ h.uid }}"><span class="uid"><b>{{ h.uid }}</b></span></a></td>
+        <td>{{ h.species }}</td>
+        <td>{{ h.locus or "" }}</td>
+        <td>{{ h.sequence_type or "" }}</td>
+        <td><span class="match-tag"{% if h.detail %} title="{{ h.detail }}"{% endif %}>{{ 'name only' if h.kind == 'name' else h.kind }}</span>{% if h.archived %} <span class="match-tag" style="background:#fbeaea;color:#b3261e" title="Not in the current reference. Kept reachable precisely so a citation still leads somewhere.">archived</span>{% endif %}{% if h.superseded_by %} <a href="/seq/{{ h.superseded_by }}" class="match-tag" style="background:#fff4e5;color:#8a5300" title="IMGT has since published this allele at a different extent. Click for the current record.">superseded</a>{% endif %}</td>
+        <td class="othernames">{{ h.label or "" }}{% if h.source %} <span class="muted">· {{ h.source }}</span>{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endif %}
+  {% else %}
+  <p class="notice">AIRBabel holds no citation linking this PMID to an allele. That is a statement
+    about this database, not about the paper: references arrive either from a source that
+    publishes them with its records or from mining a paper's full text and supplements, and
+    neither pass covers everything. A paper that has not been mined, or whose alleles AIRBabel does
+    not hold, returns nothing here even when it describes alleles in detail.</p>
+  {% endif %}
+</div>
+{% endif %}
+
+{% set shown_query = (q if q else (results.query if results is not none else "")) %}
+{% include "_results_table.html" %}
+
+{# The same answer as a machine call. Nothing new is computed: these are the REST
+   routes the page itself went through, so a result on screen is reproducible from a
+   script and citable in a methods section. `similar` mode is omitted because its API
+   call is keyed on the resolved record's UID, which the record page prints. #}
+{% if (results is not none or pmid_result) and mode != "similar" %}
+{% set sp_q = "&species=" ~ (species | reject("equalto", "*") | join(",")) if (species and "*" not in species) else "" %}
+<details class="apibox">
+  <summary>Get this result from the API</summary>
+  {% if pmid_result %}
+    <pre class="cmd">curl "<span class="host"></span>/api/pmid/{{ pmid_result.pmid }}{% set qs = ([sp_q[1:]] if sp_q else []) + (['include_name=true'] if names else []) %}{{ '?' ~ qs | join('&amp;') if qs else '' }}"</pre>
+  {% elif mode in ("sequence",) %}
+    <pre class="cmd">curl -X POST "<span class="host"></span>/api/search/sequence?category={{ cat }}{% if partial %}&amp;partial=true{% endif %}{{ sp_q }}" \
+  -H "content-type: application/json" \
+  -d '{"sequence": "{{ q }}"}'</pre>
+  {% elif mode == "aa" %}
+    <pre class="cmd">curl -X POST "<span class="host"></span>/api/search/aa?{% if partial %}partial=true{% endif %}{{ sp_q }}" \
+  -H "content-type: application/json" \
+  -d '{"sequence_aa": "{{ q }}"}'</pre>
+  {% else %}
+    <pre class="cmd"><span class="c"># resolve one name / UID to its record (add &amp;view=airr for AIRR field names)</span>
+curl "<span class="host"></span>/api/resolve?query={{ q | urlencode }}"
+<span class="c"># or the full result list this page is showing</span>
+curl "<span class="host"></span>/api/search/name?q={{ q | urlencode }}{{ sp_q }}"</pre>
+  {% endif %}
+  <p class="mode-hint" style="margin-top:8px">Full endpoint list in the <a href="/help#api">API
+     reference</a>; a runnable Python client on the <a href="/tutorial#python">tutorial page</a>.</p>
+</details>
+<script>
+  (function () {
+    var o = window.location.origin, n = document.querySelectorAll(".apibox .host");
+    for (var i = 0; i < n.length; i++) n[i].textContent = o;
+  })();
+</script>
+{% endif %}
+{% endblock %}

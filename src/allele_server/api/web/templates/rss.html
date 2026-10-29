@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% set names = alleles | map(attribute="label") | select | unique | list %}
+{% block title %}RSS {% if names %}of {{ names[:3] | join(", ") }}{% if names | length > 3 %} +{{ names | length - 3 }}{% endif %} &middot; {% endif %}{{ rss.uid }} &middot; AIRBabel{% endblock %}
+{% block description %}{{ rss.species | capitalize }} {{ kind_label }} recombination signal sequence, {{ rss.length }} nt{% if names %}, linked to {{ names[:8] | join(", ") }}{% if names | length > 8 %} and {{ names | length - 8 }} more{% endif %}{% endif %}. Sequence, sources and similar sequences in AIRBabel.{% endblock %}
+{% block body %}
+<p class="crumb"><a href="/">&larr; back to search</a></p>
+<h1>RSS <span class="uid">{{ rss.uid }}</span></h1>
+
+<div class="table-wrap facts">
+<table>
+  <tr><th>Species</th><td>{{ rss.species }}</td></tr>
+  <tr><th>Type</th><td>{{ kind_label }} <span class="muted">({{ rss.length }} nt)</span></td></tr>
+  <tr><th>Sources</th><td>
+    {% for s in sources %}<span class="tag">{{ s }}</span> {% endfor %}
+    {% if not sources %}<span class="muted">not stated</span>{% endif %}
+  </td></tr>
+</table>
+</div>
+
+{# The three parts, in the order this kind of signal actually stores them:
+   heptamer-first where the signal lies 3' of the coding sequence (V-RS, 3'D-RS),
+   nonamer-first where it lies 5' (J-RS, 5'D-RS). Colours follow the part, not the
+   position, so a heptamer is the same colour wherever it sits. #}
+{% if parts %}
+  {% set colour = {"heptamer": "#0e7c86", "nonamer": "#1f6feb"} %}
+  {% set dark = {"heptamer": "#0a5f67", "nonamer": "#1656bd"} %}
+  {% set head, mid, tail = parts %}
+  <div class="rss-schematic">
+    <svg viewBox="0 0 720 70" role="img"
+         aria-label="{{ kind_label }}: {{ head[0] }} {{ head[1] }}, spacer {{ mid[1] }}, {{ tail[0] }} {{ tail[1] }}">
+      <rect x="0" y="20" width="150" height="30" rx="5" fill="{{ colour[head[0]] }}"/>
+      <text x="75" y="13" text-anchor="middle" class="nt" fill="{{ dark[head[0]] }}">{{ head[1] }}</text>
+      <text x="75" y="39" text-anchor="middle" class="seg-label">{{ head[0] | upper }}</text>
+      <text x="75" y="64" text-anchor="middle" class="seg-sub" fill="{{ dark[head[0]] }}">{{ head[1] | length }} nt</text>
+      <rect x="160" y="26" width="400" height="18" rx="4" fill="#e4e8ee"/>
+      <text x="360" y="13" text-anchor="middle" class="nt" fill="#5d6b80" style="font-size:11px">{{ mid[1] }}</text>
+      <text x="360" y="39" text-anchor="middle" class="seg-sub" fill="#5d6b80">spacer &middot; {{ mid[1] | length }} nt</text>
+      <rect x="570" y="20" width="150" height="30" rx="5" fill="{{ colour[tail[0]] }}"/>
+      <text x="645" y="13" text-anchor="middle" class="nt" fill="{{ dark[tail[0]] }}">{{ tail[1] }}</text>
+      <text x="645" y="39" text-anchor="middle" class="seg-label">{{ tail[0] | upper }}</text>
+      <text x="645" y="64" text-anchor="middle" class="seg-sub" fill="{{ dark[tail[0]] }}">{{ tail[1] | length }} nt</text>
+    </svg>
+    <div class="rss-legend">
+      <span class="lk"><span class="sw" style="background:#0e7c86"></span>Heptamer</span>
+      <span class="lk"><span class="sw" style="background:#e4e8ee"></span>Spacer ({{ mid[1] | length }} nt)</span>
+      <span class="lk"><span class="sw" style="background:#1f6feb"></span>Nonamer</span>
+    </div>
+    <p class="muted" style="margin:6px 0 0; font-size:12.5px">RSS spacer length determines pairing
+    under the 12/23 rule, so it follows the locus rather than the segment: a 12&nbsp;nt RSS
+    recombines with a 23&nbsp;nt RSS.</p>
+  </div>
+{% endif %}
+
+<div class="seq-block">
+  <div class="seq-head">
+    <span class="len">{{ rss.length }} nt</span>
+    <button type="button" class="copy-btn" data-target="rss-seq">Copy</button>
+  </div>
+  <div class="seq" id="rss-seq">{{ rss.sequence }}</div>
+</div>
+
+<h2>Find similar RSS</h2>
+<form class="search" method="get" action="/rss/{{ rss.uid }}/similar">
+  <label>min identity
+    <select name="min">
+      {% for v, lbl in [(0.95,"95%"),(0.90,"90%"),(0.85,"85%"),(0.80,"80%"),(0.0,"any")] %}
+        <option value="{{ v }}" {% if v == 0.9 %}selected{% endif %}>{{ lbl }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label><input type="checkbox" name="cross_species" value="1"> include other species</label>
+  <button type="submit">Find similar RSS</button>
+</form>
+
+<h2>Alleles with this RSS variant</h2>
+<p class="muted"><b>{{ alleles | length }}</b> coding allele(s) linked to this exact RSS.
+   The <b>Source</b> column shows which source recorded each allele&ndash;RSS pairing.
+   Source coverage of allele to RSS pairings is source-specific.</p>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Allele name</th><th>Species</th><th>Locus</th>
+    <th>Source of this allele&ndash;RSS link</th><th>Server&nbsp;UID</th></tr></thead>
+  <tbody>
+  {% for al in alleles %}
+    <tr>
+      <td><a href="/seq/{{ al.uid }}"><b>{{ al.label or "(unnamed)" }}</b></a></td>
+      <td>{{ al.species }}</td>
+      <td>{{ al.locus or "" }}</td>
+      <td>{% for s in al.sources %}<span class="tag">{{ s }}</span> {% endfor %}</td>
+      <td><span class="uid">{{ al.uid }}</span></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}

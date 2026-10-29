@@ -1,0 +1,547 @@
+{% extends "base.html" %}
+{% block description %}Guide and REST API reference for AIRBabel: sequence-derived UIDs, naming schemes, similarity search, AIRR-format responses and bulk export of IG and TR germline alleles.{% endblock %}
+{% block title %}Guide &amp; API &middot; AIRBabel{% endblock %}
+{% block body %}
+<h1>Guide &amp; API</h1>
+<p class="sub">How to use the AIRBabel website and its REST API.</p>
+
+<div class="docs-layout">
+<nav class="docs-toc" aria-label="On this page">
+  <p class="t">On this page</p>
+  <a href="#about">Overview</a>
+  <a href="#scope">Scope</a>
+  <a href="#adds">What it adds</a>
+  <a href="#naming">Naming &amp; IDs</a>
+  <a href="#website">Using the website</a>
+  <a href="#reading">Reading a result</a>
+  <a href="#pmid">Search by PMID</a>
+  <a href="#similarity">Similarity</a>
+  <a href="#release">Release &amp; citing</a>
+  <a href="#api">REST API</a>
+  <a href="#mcp">AI assistants (MCP)</a>
+  <a href="#examples">Examples</a>
+  <a href="/tutorial">Tutorial &amp; Python &rarr;</a>
+</nav>
+<div class="docs-body">
+
+<h2 id="about">Overview</h2>
+<div class="card">
+  <p>AIRBabel is a reference database of immunoglobulin and T-cell receptor (TCR) <b>allele sequences</b>,
+  <b>leader signal-peptide coding sequences</b>, and
+  <b>recombination signal sequences (RSSs)</b> across species. Each sequence gets a deterministic <b>Server UID</b>
+  and is paired with the names it carries in multiple naming schemes (e.g. IMGT, OGRDB, internal sets), so
+  you can resolve an alias to a canonical sequence and find sequence-similar alleles.</p>
+  <p class="muted" style="margin:0">Identity is the <b>sequence</b>, not the name: the same
+  nucleotide sequence always maps to the same UID, and a name is just a label attached to it.
+  Every record carries source attribution as compact URIs (CURIEs), e.g.
+  <code>IMGT/GENE-DB:</code>, <code>OGRDB:</code>, <code>GENBANK:</code>).</p>
+</div>
+
+<h3 id="scope">Database scope</h3>
+<p>Live counts per segment, locus and species are on the <a href="/overview">overview</a>. What
+that page cannot tell you is where the scope boundaries are, so they are stated here.</p>
+
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Segment</th><th>Coverage</th></tr></thead>
+    <tbody>
+      <tr><td><b>V</b></td><td>Variable-region allele sequences from all represented immunoglobulin (IG) and TCR loci. This is the only segment class that also carries an <b>amino-acid</b> sequence and a protein UID.</td></tr>
+      <tr><td><b>D</b></td><td>Diversity-region allele sequences from IGH, TRB and TRD, the loci with D segments represented here. Compared only against D alleles <b>of the same length</b>; see <a href="#similarity">similarity</a>.</td></tr>
+      <tr><td><b>J</b></td><td>Joining-region allele sequences from all represented IG and TCR loci.</td></tr>
+      <tr><td><b>C</b></td><td><b>Immunoglobulin constant-region sequences</b> for IGH, IGK, IGL, and IGI, a zebrafish locus, represented as the <b>secreted</b> form. The membrane-bound form and the TCR constants are deferred.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p class="muted">An IGH constant region is <b>assembled</b> from the per-domain records IMGT
+publishes (CH1 + hinge + CH2 + CH3… + CHS, in domain order); IGK, IGL and IGI are published whole
+and stored as they come. Either way the ordered composition is kept as an annotation, so the
+domain boundaries stay recoverable from the stored sequence.</p>
+
+<p class="muted" style="margin:0"><b>AIRBabel stores amino-acid sequence only where translation is defined for the represented record.</b>
+A protein is stored only where a source published one or where translating the coding region is
+well&#8209;defined; in the current scope this means V. Amino-acid search and the <code>aa</code> similarity
+view are absent on D, J and C records rather than empty; no stored translation is defined for those record classes.</p>
+
+<h2 id="adds">What AIRBabel adds</h2>
+<p>Primary databases publish the reference sets. What this service adds is what can be asked of a
+sequence already in hand. Every row below is a live query, so the claim and its demonstration are
+the same thing.</p>
+
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Capability</th><th>What it does</th><th></th></tr></thead>
+    <tbody>
+      <tr><td><b>Sequence-hash identity</b></td>
+          <td>Identity is <code>sha256</code> of the normalised sequence, so the same DNA
+              is one record whichever source contributed it, and the same UID in any sibling
+              database, with no central registry.</td>
+          <td><a href="#naming">how &rarr;</a></td></tr>
+      <tr><td><b>Source-attributed aliases</b></td>
+          <td>Every name a sequence carries, each tagged with its scheme (IMGT, OGRDB,
+              VDJbase, IgDiscover, IgLabel) and the source that attributes it.</td>
+          <td><a href="/?q=IGHV1-69*01&amp;mode=auto&amp;species=human">try &rarr;</a></td></tr>
+      <tr><td><b>Historical name recovery</b></td>
+          <td>Names affected by renaming, changes in published sequence extent, or withdrawal still
+              resolve, because release snapshots attach former designations to the sequence hash,
+              not to a name.</td>
+          <td><a href="/?q=IGKV1D-17*02&amp;mode=auto">try &rarr;</a></td></tr>
+      <tr><td><b>Partial / contained match</b></td>
+          <td>Paste a truncated or primer-trimmed sequence and score it over the
+              best-matching window, so a contained fragment resolves near 100%.</td>
+          <td><a href="/?q=CAGGTTCAGCTGGTGCAGTCTGGAGCTGAGGTGAAGAAGCCTGGGGCCTCAGTGAAG&amp;mode=sequence&amp;partial=1">try &rarr;</a></td></tr>
+      <tr><td><b>Protein UID grouping</b></td>
+          <td>V alleles that differ only synonymously share one protein UID, so
+              &ldquo;which protein does this call encode?&rdquo; is a lookup, not an alignment.</td>
+          <td><a href="/?q=QVQLVQSGAEVKKPGSSVKVSCKASGGTFSSYAISWVRQAPGQGLEWMGGIIPIFGTANY&amp;mode=aa&amp;partial=1">try &rarr;</a></td></tr>
+      <tr><td><b>Cross-species neighbours</b></td>
+          <td>The closest alleles in another species, ranked by % identity, from a
+              precomputed all-against-all cache.</td>
+          <td><a href="/seq/MOUSE-V3GPCFPTO/similar?to_species=HUMAN&amp;min=0.8&amp;kind=nt" rel="nofollow">try &rarr;</a></td></tr>
+      <tr><td><b>Publication &rarr; alleles</b></td>
+          <td>Given a PubMed ID, retrieve records linked to that publication, separated by evidence
+              tier rather than summed into one number.</td>
+          <td><a href="/?q=29163486&amp;mode=pmid">try &rarr;</a></td></tr>
+      <tr><td><b>AIRR-aligned output</b></td>
+          <td>Export records as AIRR <code>AlleleDescription</code> JSON, with species
+              and sources as CURIEs.</td>
+          <td><a href="/api/resolve?query=IGHV1-69*01&amp;view=airr">try &rarr;</a></td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p class="hint"><b>Download.</b> The dataset is available through public REST API endpoints:
+   <a href="/api/export/alleles.fasta?category=coding&amp;segment=V&amp;kind=nt">FASTA</a> &middot;
+   <a href="/api/export/alleles.json?category=coding&amp;segment=V">JSON</a> &middot;
+   <a href="/api/export">manifest &amp; terms</a>. Both accept <code>category</code>,
+   <code>segment</code>, <code>species</code> (and <code>kind=nt|aa</code> for FASTA). Reuse requires
+   attribution; each source's licence and citation is on
+   <a href="/sources">Sources &amp; citations</a>.</p>
+
+<h2 id="naming">Naming &amp; identifiers</h2>
+<p>Every sequence has one canonical <b>Server UID</b> and any number of <b>names</b>. The UID
+<i>is</i> the identity; names are labels attached to it, each tagged with the scheme it follows
+and the source that attributes it.</p>
+
+<div class="card">
+  <p style="margin-bottom:8px"><b>Server UID</b>: <code>&lt;SPECIES&gt;-&lt;CODE&gt;&lt;hash&gt;</code></p>
+  <pre class="cmd" style="margin-bottom:10px">HUMAN-VQLNRZF6P
+<span class="c">  │   │   │
+  │   │   └────── base32 prefix of sha256(sequence)  (coding: 8 chars, leader/RSS: 5)
+  │   └────────── segment / category code: V/D/J/C (coding), L (leader), R (rss)
+  └────────────── species tag: HUMAN, MOUSE, RHESUS, GORILLA, …</span></pre>
+  <p style="margin:0" class="muted">The trailing token is a prefix of the sequence hash, so a UID is
+  <b>verifiable from the normalized nucleotide sequence</b>: the same nucleotide sequence always mints the same UID
+  here <i>and</i> in any sibling database, so independent instances can assign the same UID without a central registry. The full
+  sequence hash is stored as the authoritative cross-database key.</p>
+</div>
+
+<div class="card">
+  <p style="margin-bottom:8px"><b>Protein UID</b>: <code>&lt;SPECIES&gt;-VP-&lt;6 chars&gt;</code>, e.g. <code>HUMAN-VP-J6QJRI</code></p>
+  <p style="margin:0" class="muted">V coding alleles also carry a protein UID derived from the
+  amino-acid hash. It is <b>many-to-one by design</b>: alleles whose nucleotide sequences differ but
+  translate to the same protein share one protein UID, so it groups synonymous alleles.</p>
+</div>
+
+<p>A name is stored with a <b>scheme</b> (how the label is formatted) and a <b>source</b> (who
+attributes it), so the same allele usually carries several. In API responses you see them under
+<code>allele_names</code> (each with <code>scheme</code> + <code>source</code>), and the AIRR view
+exposes a primary <code>label</code> plus <code>aliases</code> (e.g. <code>IGHV1-69*01</code> also
+surfaces <code>IGHV1-69D*01</code>).</p>
+
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Scheme</th><th>Meaning</th></tr></thead>
+    <tbody>
+      <tr><td><code>imgt</code></td><td>IMGT/IUIS gene and allele name, e.g. <code>IGHV1-69*01</code>.</td></tr>
+      <tr><td><code>ogrdb</code></td><td>OGRDB allele name; inferred alleles carry an <code>*i&lt;n&gt;</code> marker.</td></tr>
+      <tr><td><code>vdjbase</code></td><td>VDJbase-style name, with a <code>_&lt;variant&gt;</code> suffix.</td></tr>
+      <tr><td><code>igdiscover</code></td><td>IgDiscover-style name; novel alleles carry an <code>_S&lt;n&gt;</code> suffix.</td></tr>
+      <tr><td><code>iglabel</code></td><td>IgLabel: a four-character deterministic, sequence-derived label.</td></tr>
+    </tbody>
+  </table>
+</div>
+<p class="hint">Sources are recorded as CURIEs with attribution, currently
+<code>IMGT/GENE-DB</code> and <code>OGRDB</code> (internal sets <code>HUSA</code> / <code>MUSA</code>
+when loaded). The service aggregates and attributes names; it does not adjudicate nomenclature.</p>
+
+<h2 id="website">Using the website</h2>
+<p>From the <a href="/">Search</a> page, enter an allele name (e.g. <code>IGHV1-69*01</code>), a
+Server UID, or paste a nucleotide or amino-acid sequence. The <b>mode</b> selector controls how the
+query is interpreted, and <b>species</b> restricts results.</p>
+
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Mode</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td><b>auto</b></td><td>Name, Server UID, or sequence. An exact allele/UID match jumps straight to the record.</td></tr>
+      <tr><td><b>name</b></td><td>Fuzzy name match (handles spacing/formatting variants).</td></tr>
+      <tr><td><b>sequence</b></td><td>Nucleotide similarity: exact, sub/superstring, and edit-distance.</td></tr>
+      <tr><td><b>aa</b></td><td>Amino-acid match. <b>V only</b>; D, J and C have no stored protein sequence (see <a href="#scope">scope</a>).</td></tr>
+      <tr><td><b>similar</b></td><td>Alleles similar to a given name/UID; goes straight to the similarity view.</td></tr>
+      <tr><td><b>pmid</b></td><td>PubMed ID search returning AIRBabel records linked to that publication, with evidence tier annotations. See <a href="#pmid">Searching by publication</a>.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>An allele <b>record</b> page shows the nucleotide and amino-acid sequence, all <b>aliases</b>
+(names from each scheme), the contributing <b>sources</b>, cross-references, <b>literature
+references</b>, and any linked <b>RSS</b>. From a record you can list <b>similar</b> alleles by
+nucleotide or amino acid, within an identity threshold, restricted to the same species or across
+species.</p>
+
+<p><b>Literature references.</b> Each record lists PubMed publications for the allele.
+References marked <b>verified</b> come from the curated tables. Those marked <b>unverified</b> are
+<b>auto-collected</b> in v1 by matching the allele name (e.g. <code>IGHV1-2*01</code>) against the
+literature via Europe PMC. They are <b>not manually checked</b>, so some may be wrong or not
+actually about that allele. Treat unverified references as leads to follow, not as ground truth.</p>
+<p class="hint">Tip: searches are capped (default 100 rows). When a result set is truncated the
+response is flagged <code>capped: true</code>. Narrow by species or use a more specific query.</p>
+
+<h2 id="reading">Reading a result</h2>
+<p>Every hit carries a <b>match type</b> (the <code>Match</code> column on the site,
+<code>matched_by</code> in JSON). It says <i>how</i> the hit was found, which is not the same
+question as how similar it is; a name match, in particular, says nothing about the
+sequence. The same table is available one click away on any result page.</p>
+
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Match</th><th>What it means</th></tr></thead>
+    <tbody>
+      <tr><td><code>exact</code></td><td>Query and stored sequence are <b>identical</b> after normalisation; same hash, therefore the same allele whatever either is called.</td></tr>
+      <tr><td><code>substring</code></td><td>One sequence is <b>fully contained</b> in the other, with no mismatches: your query is a fragment of this allele, or the allele is a fragment of your query.</td></tr>
+      <tr><td><code>similar</code></td><td>Neither exact nor contained. Ranked by <b>% identity</b> (see <a href="#similarity">similarity</a>); read it together with the identity score.</td></tr>
+      <tr><td><code>name</code></td><td>Matched a <b>label</b>. Carries no sequence claim; the same name denotes different sequences in different species.</td></tr>
+      <tr><td><code>cached</code></td><td>Served from the precomputed neighbour cache. The same identity calculation, done ahead of time.</td></tr>
+      <tr><td><code>protein_uid</code></td><td>Matched a <b>protein</b> UID: V alleles that differ in nucleotide sequence but translate to the same amino-acid sequence.</td></tr>
+      <tr><td><code>superseded</code></td><td>A record <i>status</i>, not a match type: IMGT has since published this allele at a different extent. The tag links to the current record.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p class="hint">Two further distinctions worth keeping apart. <b>Cross-species neighbour</b>: a hit in
+another species, found by identity rather than by name; numbering schemes are
+independent, so allele names do not establish orthology. <b>Verified vs mined literature
+evidence</b>: a curator-published or GenBank-derived citation is an assertion someone stands behind;
+a mined name-only hit is a lead. They are shown apart and never summed; see
+<a href="#pmid">searching by publication</a>.</p>
+
+<h2 id="pmid">Searching by publication (PMID)</h2>
+<p>The reference list on a record answers &ldquo;which papers cite this allele?&rdquo;. <b>PMID
+mode</b> asks the reverse: <i>given a paper, which AIRBabel allele records are linked to it?</i> Enter a
+PubMed ID as bare digits (<code>29163486</code>), as <code>PMID:29163486</code>, or as a PubMed
+URL. In <b>auto</b> mode a bare PubMed ID is recognised without selecting the mode.</p>
+
+<p>Every hit is tagged with <b>how</b> the paper attests it, and the tiers are reported
+separately rather than summed, because they are not equally strong claims:</p>
+
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Evidence</th><th>What it means</th></tr></thead>
+    <tbody>
+      <tr><td><b>verified</b></td><td>A source published the citation as part of its own record, or it comes from a GenBank cross-reference. This is a curator-published or GenBank-derived assertion, not an AIRBabel assertion.</td></tr>
+      <tr><td><b>sequence</b></td><td>The paper&rsquo;s full text or a supplementary file contains this <i>exact</i> sequence, matched by hash.</td></tr>
+      <tr><td><b>name only</b></td><td>The paper mentions the allele <i>name</i>. This is a lead, not sequence-level evidence, because the same string can denote different sequences in different species.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p><b>Archived records are returned in PMID search and flagged.</b> That is
+deliberate: a paper citing a name IMGT has since retired is precisely the case where the
+citation still has to lead somewhere. Where a newer record supersedes the one cited, the row
+links to it.</p>
+
+<p class="notice"><b>Coverage is partial, and an empty result is not negative evidence.</b> Citations reach this
+database two ways: a source publishes them with its records, or AIRBabel mines a paper&rsquo;s
+full text and supplements. Neither pass is exhaustive. Most of what is loaded today
+comes from curated sets that carry their own references. So an empty result means <b>AIRBabel holds no
+citation linking that paper to an allele</b>; it is not evidence that the paper describes none.
+Treat a linked record as evidence within AIRBabel and an empty result as absence of recorded linkage.</p>
+
+<p class="hint">Also available as JSON: <code>GET /api/pmid/{pmid}</code>, which returns the same
+tiered hits and <code>422</code> for a string that is not a PubMed ID.</p>
+
+<h2 id="similarity">Sequence similarity calculation</h2>
+<p>The <b>% identity</b> between two sequences is their <b>normalised Levenshtein
+(edit-distance) similarity</b> over the optimal edit-distance alignment of the two stored
+<b>ungapped</b> sequences, reported as <code>1 - edits / length</code>:</p>
+
+<p style="text-align:center; margin:4px 0 18px">
+  <code style="font-size:15px; background:var(--accent-soft); color:var(--fg);
+  padding:7px 14px; border-radius:7px">identity&nbsp;=&nbsp;1&nbsp;−&nbsp;edits&nbsp;/&nbsp;length</code>
+</p>
+
+<ul>
+  <li>An <b>edit</b> is a substitution, insertion, or deletion. One substitution between
+  two equal-length sequences lowers identity by exactly <code>1 / length</code>, so the numbers
+  track a standard mismatch count.</li>
+  <li>Computed separately for <b>nucleotide</b> and <b>amino-acid</b> sequences.</li>
+  <li>Similarity is computed all-against-all <b>within</b> each species, and <b>between</b> species for the
+  cross-species view, then stored as a precomputed cache, so a search is a fast lookup.</li>
+  <li>Results are ranked by identity; each view shows neighbours at or above your chosen threshold.</li>
+  <li>Alleles are only ever compared <b>within one segment</b>. V and J segments represent different biological classes, so they are not ranked against each other.</li>
+</ul>
+
+<p><b>D alleles use a segment-specific rule.</b> A D segment is 8&ndash;148&nbsp;nt
+(median 19&nbsp;nt). At that length an edit distance can open a gap to flatter a score, and almost any two
+D alleles look related. So a D allele is compared <b>only against D alleles of exactly the same
+length</b>, and scored by counting mismatching positions (<b>Hamming</b> distance) rather than by
+edit distance, so no gap can be introduced.</p>
+
+<p class="hint">The consequence is visible: two D alleles of <i>different</i> lengths are not
+ranked against each other at all, so a D search returns fewer neighbours than a V search and can
+return none. This is a method boundary, not a metadata gap; separating short sequences of unequal
+length needs a multiple alignment, which this database does not compute.</p>
+
+<p class="hint">Note: this is edit distance on the stored (ungapped) sequences, so it accounts for
+insertions and deletions as well as substitutions. It matches a position-by-position comparison for
+similar alleles, and can differ slightly for distantly related or different-length sequences.</p>
+
+<p class="notice"><b>Two limits of the amino-acid comparison, worth knowing before you read a
+score.</b> First, every substitution costs the same: this is <b>unit-cost edit distance, not a
+substitution matrix</b>. I to V and I to D are both one edit, though
+only one of them is conservative. That is the right choice for ranking alleles of the same gene,
+which differ at a handful of positions; it is the wrong tool for detecting remote homology, where a
+BLOSUM-scored local alignment (BLAST, DIAMOND, MMseqs2, parasail) is what you want. Second, a
+<b>short</b> query in partial mode scores against its best window, so a handful of residues
+contained in an allele scores ~100%; true, and not informative. Read the score together
+with the query length shown beside it.</p>
+
+<p><b>Full-length vs partial match.</b> By default identity is computed over the <b>full</b>
+sequences, so a <b>partial or truncated</b> query is penalised for the length it does not cover (a
+200&nbsp;nt fragment of a 300&nbsp;nt allele scores ~67%). Tick <b>“partial / contained match”</b> on a
+sequence or amino-acid search to score identity over the <b>best-matching window</b> instead: a
+fragment fully contained in an allele then scores ~100%. Use it when you paste an incomplete sequence
+and want to know which allele it came from.</p>
+
+<h2 id="release">Dataset release &amp; how to cite a result</h2>
+<p>A served identity score depends on two things that move independently: <b>which data</b> is
+loaded, and <b>how distance is computed</b> over it. A build is therefore stamped with both; each is
+digested, so two deployments can be compared by one string instead of by counting rows.</p>
+
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Field</th><th>What it pins</th></tr></thead>
+    <tbody>
+      <tr><td><code>release</code></td><td><code>YYYY.MM.DD</code> (with <code>.N</code> for a second build the same day). The human-facing version.</td></tr>
+      <tr><td><code>content_digest</code></td><td>sha256 over the <b>sequence identity set</b> (species | category | sequence hash) <i>and</i> the <b>name set</b> (name | scheme | source). Recomputable from the database, so an instance holding different alleles, or the same alleles under different names, reports a different string.</td></tr>
+      <tr><td><code>similarity_digest</code></td><td>sha256 over the distance parameters: metric, the per-segment equal-length policy, the cache floors and cap. Change <code>NEIGHBOR_FLOOR</code> and this digest moves, which is the point.</td></tr>
+      <tr><td><code>neighbors_built</code></td><td>Whether the precomputed neighbour cache is present. Same metric either way; without it, similarity is computed live.</td></tr>
+      <tr><td><code>code_version</code></td><td>The software that produced the build; separate from the data version, never a substitute for it.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>All of it is at <a href="/version"><code>GET /version</code></a>, repeated in
+<a href="/api/export"><code>/api/export</code></a> and in the JSON export, and carried on a FASTA
+download as the <code>X-Dataset-Release</code> and <code>X-Dataset-Digest</code> headers, so
+a file that leaves here can still say which build it is. The <a href="/sources#release">Sources</a>
+page shows the same record in full.</p>
+
+<p class="hint"><b>Citing a result.</b> Quote the <code>release</code> and the date. If the exact
+comparison matters, such as a threshold, a neighbour list, or a reported % identity, quote the
+<code>similarity_digest</code> too: it is what makes the number reproducible. An instance reporting
+<code>dataset: null</code> has not been stamped; cite the access date instead of inventing a
+version.</p>
+
+<h2 id="api">REST API</h2>
+<p>The same query core is exposed as JSON over HTTP. Interactive, auto-generated documentation:</p>
+<ul class="tight">
+  <li><a href="/docs">/docs</a>: Swagger UI (try requests in the browser)</li>
+  <li><a href="/redoc">/redoc</a>: ReDoc reference</li>
+  <li><a href="/openapi.json">/openapi.json</a>: raw OpenAPI schema</li>
+</ul>
+<p>Base URL for this instance: <code class="host">/</code></p>
+<p class="hint">A runnable, dependency-free <b>Python client</b> covering name resolution, sequence
+resolution, record retrieval, similarity, AIRR output and PMID lookup is on the
+<a href="/tutorial#python">tutorial page</a> and
+<a href="/tutorial/airbabel_example.py" download>as a downloadable file</a>. The same page provides five
+worked examples.</p>
+
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Endpoint</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><span class="method">GET</span> <code>/api/resolve?query=&lt;name|uid&gt;</code></td><td>Resolve a name or UID to its canonical record. Add <code>&amp;view=airr</code> for an AIRR <code>AlleleDescription</code>.</td></tr>
+      <tr><td><span class="method">GET</span> <code>/api/sequences/{uid}</code></td><td>Fetch a record by Server UID. Supports <code>?view=airr</code>.</td></tr>
+      <tr><td><span class="method">GET</span> <code>/api/sequences/{uid}/aliases</code></td><td>All names this sequence carries, each with its scheme.</td></tr>
+      <tr><td><span class="method">GET</span> <code>/api/sequences/{uid}/similar</code></td><td>Similar alleles. Params: <code>min_identity</code> (0&ndash;1, default 0.9), <code>same_species</code> (default true), <code>kind=nt|aa</code>.</td></tr>
+      <tr><td><span class="method">GET</span> <code>/api/rss/{uid}</code></td><td>Coding alleles linked to this RSS, with the source of each link.</td></tr>
+      <tr><td><span class="method">GET</span> <code>/api/rss/{uid}/similar</code></td><td>RSS sequences similar to this one. Params: <code>min_identity</code>, <code>same_species</code>.</td></tr>
+      <tr><td><span class="method">GET</span> <code>/api/search/name?q=&lt;term&gt;</code></td><td>Fuzzy name search. Optional <code>&amp;species=</code> (any species tag, comma-separated; omit for all).</td></tr>
+      <tr><td><span class="method post">POST</span> <code>/api/search/sequence</code></td><td>Nucleotide similarity search. JSON body <code>{"sequence": "..."}</code>.</td></tr>
+      <tr><td><span class="method post">POST</span> <code>/api/search/aa</code></td><td>Amino-acid search. JSON body <code>{"sequence_aa": "..."}</code>.</td></tr>
+      <tr><td><span class="method">GET</span> <code>/version</code></td><td>Software version <b>and</b> the stamped dataset release: content digest, distance-computation digest, counts, source versions. See <a href="#release">release &amp; citing</a>.</td></tr>
+      <tr><td><span class="method">GET</span> <code>/healthz</code></td><td>Liveness probe.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<h2 id="mcp">Using AIRBabel from an AI assistant (MCP)</h2>
+<p>AIRBabel is also a public <a href="https://modelcontextprotocol.io" target="_blank" rel="noopener">Model Context Protocol</a> server, so an AI assistant such as Claude can query it directly while you work. No account or key is needed.</p>
+<pre class="cmd">https://airbabel.org/mcp/</pre>
+<p>Add this URL as a remote (Streamable HTTP) MCP server or custom connector in your client. In Claude Code:</p>
+<pre class="cmd">claude mcp add --transport http airbabel https://airbabel.org/mcp/</pre>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Tool</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td><code>resolve_allele</code></td><td>Resolve an allele name, UID or protein UID to its record. Pass <code>species</code> to pin a name reused across species.</td></tr>
+      <tr><td><code>resolve_sequence</code></td><td>Resolve a nucleotide or amino-acid sequence to its record, by sequence identity.</td></tr>
+      <tr><td><code>get_aliases</code></td><td>Every name a sequence carries, with its naming scheme and source.</td></tr>
+      <tr><td><code>find_similar</code></td><td>Nearest alleles by nucleotide or amino-acid identity.</td></tr>
+      <tr><td><code>get_cross_species_neighbors</code></td><td>Nearest alleles in other species (a sequence signal, not a curated orthology call).</td></tr>
+    </tbody>
+  </table>
+</div>
+<p class="muted">The server runs on a small shared instance, so requests are rate-limited, with a tighter limit on the two similarity tools. Name and sequence lookups are not affected by the similarity limit.</p>
+
+<h2 id="examples">Examples</h2>
+<p class="hint">Responses below are trimmed (long sequences shown as <code>…</code>, list tails as
+<code>…</code>) for readability.</p>
+
+<div class="ex">
+  <pre class="cmd"><span class="c"># resolve an alias to its canonical record</span>
+curl "<span class="host"></span>/api/resolve?query=IGHV1-69*01"</pre>
+  <div class="io-label">Response</div>
+  <pre class="out">{
+  "matched_by": "name",
+  "record": {
+    "native": {
+      "uid": "HUMAN-VQLNRZF6P",
+      "species": "HUMAN", "category": "coding", "segment": "V", "locus": "IGH",
+      "sequence": "CAGGTGCAGCTGGTG<span class="e">…</span>TGTGCGAGAGA",
+      "sequence_aa": "QVQLVQSGAEVKKPGSSVKVSCKAS<span class="e">…</span>VYYCAR",
+      "protein_uid": "HUMAN-VP-J6QJRI",
+      "functional": true, "length": 296,
+      "allele_names": [
+        { "name": "IGHV1-69*01",  "scheme": "imgt", "source": "IMGT" },
+        { "name": "IGHV1-69D*01", "scheme": "imgt", "source": "IMGT" }
+      ]
+    }
+  }
+}</pre>
+</div>
+
+<div class="ex">
+  <pre class="cmd"><span class="c"># the same record as an AIRR AlleleDescription</span>
+curl "<span class="host"></span>/api/resolve?query=IGHV1-69*01&amp;view=airr"</pre>
+  <div class="io-label">Response</div>
+  <pre class="out">{
+  "label": "IGHV1-69*01",
+  "aliases": ["IGHV1-69D*01"],
+  "coding_sequence": "CAGGTGCAGCTGGTG<span class="e">…</span>TGTGCGAGAGA",
+  "sequence_aa": "QVQLVQSGAEVKKPGSSVKVSCKAS<span class="e">…</span>VYYCAR",
+  "functional": true, "locus": "IGH", "sequence_type": "V",
+  "species": { "id": "NCBITAXON:9606", "label": "Homo sapiens" },
+  "germline_set_ref": null
+}</pre>
+</div>
+
+<div class="ex">
+  <pre class="cmd"><span class="c"># fuzzy name search, restricted to mouse</span>
+curl "<span class="host"></span>/api/search/name?q=IGHV1&amp;species=mouse"</pre>
+  <div class="io-label">Response</div>
+  <pre class="out">{
+  "query": "IGHV1",
+  "count": 100,
+  "capped": true,
+  "hits": [
+    { "uid": "MOUSE-VC6BUL56P", "label": "IGHV1-9*02", "species": "MOUSE",
+      "locus": "IGH", "sequence_type": "V", "score": 0.5455,
+      "matched_by": "name", "aliases": ["IGHV1-9*02"] }<span class="e">,
+    …</span>
+  ]
+}</pre>
+</div>
+
+<div class="ex">
+  <pre class="cmd"><span class="c"># alleles similar (amino acid) to a Server UID, same species, &ge;95% identity</span>
+curl "<span class="host"></span>/api/sequences/HUMAN-VBSLUZ7BO/similar?kind=aa&amp;min_identity=0.95"</pre>
+  <div class="io-label">Response</div>
+  <pre class="out">{
+  "query": "aa similar to HUMAN-VBSLUZ7BO",
+  "count": 15,
+  "capped": false,
+  "hits": [
+    { "uid": "HUMAN-VEQGFHKOW", "label": "IGHV1-69*21", "species": "HUMAN",
+      "locus": "IGH", "sequence_type": "V", "score": 1.0,
+      "matched_by": "exact", "aliases": ["IGHV1-69*21"] }<span class="e">,
+    …</span>
+  ]
+}</pre>
+</div>
+
+<div class="ex">
+  <pre class="cmd"><span class="c"># search by a nucleotide sequence (exact / substring / edit-distance)</span>
+curl -X POST "<span class="host"></span>/api/search/sequence" \
+  -H "content-type: application/json" \
+  -d '{"sequence": "CAGGTGCAGCTGGTGCAGTCTGGGGCTGAGGTGAAGAAGCCTGGGTCCTCGGTGAAGGTCTCCTGCAAGGCTTCTGGAGGCACCTTCAGC"}'</pre>
+  <div class="io-label">Response</div>
+  <pre class="out">{
+  "query": "&lt;90 nt&gt;",
+  "count": 100,
+  "capped": true,
+  "hits": [
+    { "uid": "HUMAN-VS2XWHE7J", "label": "IGHV1-69*03", "species": "HUMAN",
+      "locus": "IGH", "sequence_type": "V", "score": 1.0,
+      "matched_by": "substring", "aliases": ["IGHV1-69*03"] }<span class="e">,
+    …</span>
+  ]
+}</pre>
+</div>
+
+<div class="ex">
+  <pre class="cmd"><span class="c"># search by an amino-acid sequence</span>
+curl -X POST "<span class="host"></span>/api/search/aa" \
+  -H "content-type: application/json" \
+  -d '{"sequence_aa": "QVQLVQSGAEVKKPGSSVKVSCKAS"}'</pre>
+  <div class="io-label">Response</div>
+  <pre class="out">{
+  "query": "&lt;25 aa&gt;",
+  "count": 1,
+  "capped": false,
+  "hits": [
+    { "uid": "HUMAN-VDZQSSG5X", "label": "IGHV1/OR16-3*01", "species": "HUMAN",
+      "locus": "IGH", "sequence_type": "V", "score": 0.92,
+      "matched_by": "similar", "aliases": ["IGHV1/OR16-3*01"] }
+  ]
+}</pre>
+</div>
+
+<p class="hint">Responses are JSON. Search endpoints return <code>{query, count, capped, hits[]}</code>;
+each hit carries the <code>uid</code>, <code>label</code>, <code>species</code>, <code>locus</code>,
+match <code>score</code>, and <code>aliases</code>. Use <code>?view=airr</code> on
+<code>resolve</code> or <code>sequences</code> for field names aligned with the AIRR <code>AlleleDescription</code> schema.</p>
+
+</div><!-- /docs-body -->
+</div><!-- /docs-layout -->
+
+<script>
+  (function () {
+    var origin = window.location.origin;
+    var nodes = document.querySelectorAll(".host");
+    for (var i = 0; i < nodes.length; i++) nodes[i].textContent = origin;
+
+    // Scrollspy: highlight the TOC link for the section currently in view.
+    var links = Array.prototype.slice.call(document.querySelectorAll(".docs-toc a"));
+    var sections = links
+      .map(function (a) { return document.getElementById(a.getAttribute("href").slice(1)); })
+      .filter(Boolean);
+    if (!("IntersectionObserver" in window) || !sections.length) return;
+    var visible = {};
+    var obs = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) { visible[e.target.id] = e.isIntersecting; });
+      var current = null;
+      for (var i = 0; i < sections.length; i++) {
+        if (visible[sections[i].id]) { current = sections[i].id; break; }
+      }
+      links.forEach(function (a) {
+        a.classList.toggle("active", a.getAttribute("href") === "#" + current);
+      });
+    }, { rootMargin: "-72px 0px -65% 0px" });
+    sections.forEach(function (s) { obs.observe(s); });
+  })();
+</script>
+{% endblock %}
+{# eof #}

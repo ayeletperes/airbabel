@@ -1,0 +1,64 @@
+schema_version = 1
+
+slug = "ki_tcr"
+name = "KI-TCR"
+label = "KI-TCR"
+aliases = ["Karolinska Institutet human T-cell receptor database", "KI TCR", "gkhlab-tcr"]
+role = "external"
+description = """\
+Population-based human T-cell receptor germline gene sequences for TRA, TRB, TRG and \
+TRD, inferred by IgDiscover from expressed repertoires and released by the Karlsson \
+Hedestam group at Karolinska Institutet. The TR counterpart of KIARVA, from the same \
+laboratory."""
+homepage_url = "https://gkhlab.gitlab.io/tcr/"
+# KI-TCR's own per-allele identifiers, matching how every sibling curated set is
+# namespaced (KIARVA, KIMDB, MUSA, HUSA, VRC, RHGLDB). Novel alleles carry an
+# IMGT-named backbone plus an "_S<n>" suffix.
+curie_prefix = "KI-TCR"
+
+[licence]
+status = "none_declared"
+redistributable = false
+note = """\
+No licence statement appears on the site (checked 2026-09-09). What it grants is \
+narrower than an open licence and states its own boundary explicitly: "Please cite the \
+following paper when using these data for academic purposes ... For other uses, please \
+contact the corresponding authors." Ingested and credited on that basis; NOT included \
+in the bulk export, which `export.export_alleles` enforces by filtering on this flag. \
+Worth asking the authors directly for a CC BY 4.0 grant -- the same group already \
+supplies KIARVA, so the ask is small and would remove the restriction."""
+
+[citation]
+status = "verified"
+text = """\
+Corcoran M, Chernyshev M, Mandolesi M, Narang S, Kaduk M, Ye K, Sundling C, Färnert A, \
+Kreslavsky T, Bernhardsson C, Larena M, Jakobsson M, Karlsson Hedestam GB. Archaic \
+humans have contributed to large-scale variation in modern human T cell receptor genes. \
+Immunity. 2023;56(3):635-652.e6."""
+doi = "10.1016/j.immuni.2023.01.026"
+pmid = "36796364"
+note = "Verified against PubMed 36796364 on 2026-09-09; the site asks for this paper by name."
+
+[scope]
+species = ["HUMAN"]
+loci = ["TRA", "TRB", "TRG", "TRD"]
+segments = ["V", "D", "J"]
+categories = ["coding"]
+
+[ingest]
+module = "allele_server.ingest.ki_tcr"
+published = true
+note = """\
+Ten per-segment FASTA files under https://gkhlab.gitlab.io/tcr/sequences/. The site also \
+publishes four archaic-hominin genome sets (Altai, Chagyrskaya, Denisova, Vindija); those \
+are NOT ingested -- they are archaic genomes, not modern human germline, and filing them \
+under species HUMAN would be wrong. See TODO(ki-tcr-archaic)."""
+
+[approval]
+candidate = "manual:ki-tcr"
+approved_by = "Ayelet Peres"
+approved_at = 2026-09-09T00:00:00Z
+note = """\
+Approved for ingest-and-credit only. Overlap measured before approval: of 410 sequences, \
+289 are already held under an identical sequence hash and 121 are new. Redistribution is \
+withheld pending an explicit licence from the authors."""

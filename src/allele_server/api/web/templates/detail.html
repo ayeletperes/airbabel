@@ -1,0 +1,391 @@
+{% extends "base.html" %}
+{% set n = record.native %}
+{% set a = record.airr %}
+{% set scheme_label = {
+  "iuis": "IUIS", "imgt": "IMGT", "ogrdb": "OGRDB", "vdjbase": "VDJbase",
+  "igdiscover": "IgDiscover", "iglabel": "IgLabel", "husa": "HUSA", "asc": "ASC",
+  "kimdb": "KIMDB", "rhgldb": "RhGLDB+", "vrc": "VRC", "guo": "Guo",
+  "ncbi": "NCBI accession", "imgt_alt": "IMGT clone / former name"} %}
+{% macro info(tip, href="") -%}
+<a class="info" data-tip="{{ tip }}" aria-label="{{ tip }}" tabindex="0"
+   {%- if href %} href="{{ href }}" target="_blank" rel="noopener"{% endif %}>i</a>
+{%- endmacro %}
+{% macro alias_row(al) %}
+  <tr>
+    {# longname: a curated seed+mutations label has no spaces to break on. #}
+    <td class="longname">{% if al.url %}<a href="{{ al.url }}" target="_blank" rel="noopener">{{ al.name }}</a>
+        {% else %}{{ al.name }}{% endif %}</td>
+    <td>{{ scheme_label.get(al.scheme, al.scheme) }}</td>
+    <td class="muted">{{ al.source }}</td>
+  </tr>
+{% endmacro %}
+{% macro alias_group_row(g) %}
+  <tr>
+    <td class="longname">{% if g.url %}<a href="{{ g.url }}" target="_blank" rel="noopener">{{ g.name }}</a>
+        {% else %}{{ g.name }}{% endif %}</td>
+    <td>{{ scheme_label.get(g.scheme, g.scheme) }}</td>
+    <td class="muted">{{ g.sources | join(", ") }}</td>
+  </tr>
+{% endmacro %}
+{% block head %}
+<style>
+  details.collapse-card { border: 1px solid var(--line); border-radius: var(--radius);
+    background: var(--surface); box-shadow: var(--shadow); margin: 20px 0; }
+  details.collapse-card > summary { cursor: pointer; padding: 14px 18px; list-style: none;
+    display: flex; align-items: baseline; gap: 10px 12px; flex-wrap: wrap; }
+  details.collapse-card > summary::-webkit-details-marker { display: none; }
+  details.collapse-card > summary::before { content: "\25B8"; color: var(--accent);
+    font-size: 12px; align-self: center; }
+  details.collapse-card[open] > summary::before { content: "\25BE"; }
+  details.collapse-card > summary .cc-title { font-size: 18px; font-weight: 600; letter-spacing: -.01em; }
+  details.collapse-card > summary .cc-meta { font-size: 13px; }
+  details.collapse-card > *:not(summary) { margin-left: 18px; margin-right: 18px; }
+  details.collapse-card > *:last-child { margin-bottom: 16px; }
+</style>
+{# Machine-readable record for search and AI engines: every recorded name as an
+   alternateName is the point, since a name from any source should land here. #}
+{% set ld_names = ((n.allele_names | map(attribute="name") | list)
+                   + (n.other_name_groups | map(attribute="name") | list)
+                   + (n.former_names | map(attribute="name") | list)) | unique | list %}
+{# isPartOf: Google validates the nested Dataset on its own, and without "description"
+   it is an invalid item (Search Console, 2026-10). Licences differ per source, so
+   "license" points at /sources, which states each one. #}
+{% set ld = {
+  "@context": "https://schema.org",
+  "@type": "Gene",
+  "name": a.label or n.uid,
+  "identifier": n.uid,
+  "url": public_url ~ "/seq/" ~ n.uid,
+  "alternateName": ld_names | reject("equalto", a.label) | list,
+  "description": self.description(),
+  "hasBioPolymerSequence": n.sequence,
+  "taxonomicRange": {"@type": "Taxon", "name": a.species.label, "identifier": a.species.id,
+                     "url": "https://www.ncbi.nlm.nih.gov/Taxonomy/Browser/wwwtax.cgi?id=" ~ a.species.id.split(":")[1]},
+  "isPartOf": {"@type": "Dataset", "name": "AIRBabel", "url": public_url ~ "/",
+               "description": "A sequence-defined reference for immunoglobulin (IG) and T-cell receptor (TR) germline alleles, leaders and RSSs across many species, resolving IMGT, OGRDB, IUIS and other allele names to one sequence identity.",
+               "license": public_url ~ "/sources",
+               "creator": [{"@type": "Person", "name": "Ayelet Peres"},
+                           {"@type": "Person", "name": "Gur Yaari"},
+                           {"@type": "Person", "name": "Corey Watson"},
+                           {"@type": "Person", "name": "William Lees"}]},
+} %}
+<script type="application/ld+json">{{ ld | tojson }}</script>
+{% endblock %}
+{% block description %}{{ a.label or n.uid }}: {{ a.species.label }} {{ n.locus or "" }} {{ n.segment or "" }} allele, {{ n.length }} nt{% if n.archived %}, archived{% endif %}. Nucleotide{% if n.segment == "V" %} and amino-acid{% endif %} sequence, every recorded name with its naming scheme{% if n.sources %} (sources: {% for s in n.sources %}{{ s.name }}{% if not loop.last %}, {% endif %}{% endfor %}){% endif %}, and similar alleles, in AIRBabel.{% endblock %}
+{# The page is also reachable by protein UID; point every route at the one record URL. #}
+{% block canonical_url %}{{ public_url }}/seq/{{ n.uid }}{% endblock %}
+{# Name first: the name is what people search for; the UID still leads the page. #}
+{% block title %}{% if a.label %}{{ a.label | truncate(48, true) }} · {{ a.species.label }} {{ n.segment or "" }} allele · {% endif %}{{ n.uid }} &middot; AIRBabel{% endblock %}
+{% block body %}
+<p class="crumb"><a href="/">&larr; back to search</a></p>
+
+<div class="detail-head">
+  <h1 class="uid-title">{{ n.uid }}</h1>
+  <p class="uid-line">
+    AIRBabel's deterministic identifier, minted from the sequence (<span class="mono">SPECIES-CODE+hash</span>) {{ info("A stable identifier derived from the normalized sequence. AIRBabel displays this identifier before source-specific allele names; all attributed names for this sequence are listed below.", "/help#naming") }}: a stable sequence-derived identifier, <b>not</b> an official allele name. This sequence's names from each source are listed under <a href="#names">Allele names</a>.
+  </p>
+  <div class="pill-row">
+    {% if n.archived %}<span class="pill" style="background:#fbeaea;color:#b3261e;font-weight:600"><span class="pk">Status</span><span class="pv">Archived{% if n.first_seen %} · seen {{ n.first_seen }}{% if n.last_seen and n.last_seen != n.first_seen %} → {{ n.last_seen }}{% endif %}{% endif %}</span></span>{% elif n.retired %}<span class="pill" style="background:#fbeaea;color:#b3261e;font-weight:600"><span class="pk">Status</span><span class="pv">Retired in IMGT</span></span>{% endif %}
+    <span class="pill"><span class="pk">Species</span><span class="pv">{{ a.species.label }}</span></span>
+    {% if n.locus %}<span class="pill"><span class="pk">Locus</span><span class="pv">{{ n.locus }}</span></span>{% endif %}
+    {% if n.segment %}<span class="pill"><span class="pk">Type</span><span class="pv">{{ n.segment }}</span></span>{% endif %}
+    <span class="pill {% if n.functional in ['functional', 'F', True] %}ok{% endif %}"><span class="pk">Functional</span><span class="pv">{{ n.functional }}</span></span>
+    <span class="pill accent"><span class="pk">Length</span><span class="pv">{{ n.length }} nt</span></span>
+    {% if n.newer_version %}<span class="pill" style="background:#fff4e5;color:#8a5300;font-weight:600"><span class="pk">Record</span><span class="pv">Superseded</span></span>{% endif %}
+  </div>
+</div>
+
+{# Answer first: the facts an engine (or a reader) quotes, in one sentence at the top. #}
+{% set fstat = {True: "functional", False: "non-functional", "F": "functional",
+                 "ORF": "open reading frame (ORF)", "P": "pseudogene"}.get(n.functional, n.functional or "not recorded") %}
+{% set top_names = n.allele_names | rejectattr("scheme", "equalto", "iglabel") | map(attribute="name") | unique | list %}
+<p class="answer">{% if top_names %}<b>{{ top_names[:6] | join(", ") }}</b>{% if top_names | length > 6 %} and {{ top_names | length - 6 }} more names{% endif %}: {% endif %}a {{ a.species.label }}
+  {{ n.locus or "" }} {{ n.segment or "" }} allele sequence, {{ n.length }} nt, <b>{{ fstat }}</b>{% if n.archived %}, archived{% endif %}.
+  The <a href="#sequence">nucleotide{% if n.sequence_aa %} and amino-acid{% endif %} sequence</a> is below, with every recorded name and its source.</p>
+
+{% if n.newer_version %}
+<p class="notice"><b>A newer source record exists for this allele designation.</b>
+  <b>{{ n.newer_version.name }}</b> is still published by IMGT{% if n.newer_version.current %}{% else %} in a later release{% endif %} as
+  <a href="/seq/{{ n.newer_version.uid }}"><span class="mono">{{ n.newer_version.uid }}</span></a>, {{ n.newer_version.length }} nt{% if n.newer_version.relation == 'extends' %}, which <b>contains this sequence</b>{% elif n.newer_version.relation == 'trims' %}, a shorter cut <b>contained in this sequence</b>{% else %}, whose bases differ from this one{% endif %}.
+  This is the <b>earlier record</b> ({{ n.length }} nt{% if n.first_seen %}, current in IMGT releases {{ n.first_seen }}{% if n.last_seen and n.last_seen != n.first_seen %}&ndash;{{ n.last_seen }}{% endif %}{% endif %}).
+  The allele was not renamed and it was not withdrawn: IMGT changed the published sequence extent associated with this designation. Both extents are kept because a sequence is identified by its bases, so a change in extent is a different sequence.</p>
+{% endif %}
+
+{% if n.prev_versions %}
+<h2 id="versions">Earlier records of this allele {{ info("Same IMGT designation, earlier release range, different extent. IMGT revises how much sequence it publishes under a name; a partial record may later be completed, or a longer record may later be trimmed. Each extent is stored separately because identity is the sequence hash, not the name.", "/help#naming") }}</h2>
+<p class="muted">IMGT has published this allele name over more than one sequence extent. Earlier sequence extents are deferred from default search results but remain resolvable, so a paper that cited one still leads here.</p>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Record</th><th>Name</th><th>Length</th><th>Relation to this record</th><th>IMGT releases</th></tr></thead>
+  <tbody>{% for v in n.prev_versions %}<tr>
+    <td><a href="/seq/{{ v.uid }}"><span class="mono">{{ v.uid }}</span></a></td>
+    <td><b>{{ v.name }}</b></td>
+    <td>{{ v.length }} nt</td>
+    <td class="muted">{% if v.relation == 'trims' %}contained in this record{% elif v.relation == 'extends' %}contains this record{% else %}bases differ{% endif %}</td>
+    <td class="muted">{{ v.first_seen or "not recorded" }}{% if v.last_seen and v.last_seen != v.first_seen %}&ndash;{{ v.last_seen }}{% endif %}</td>
+  </tr>{% endfor %}</tbody>
+</table>
+</div>
+{% endif %}
+
+<div class="table-wrap facts">
+<table>
+  <tr><th>Species</th><td>{{ a.species.label }}
+      <a href="https://www.ncbi.nlm.nih.gov/Taxonomy/Browser/wwwtax.cgi?id={{ a.species.id.split(':')[1] }}"
+         target="_blank" rel="noopener" class="muted">({{ a.species.id }})</a></td></tr>
+  <tr><th>Locus / type</th><td>{{ n.locus or "" }} / {{ n.segment or "" }}</td></tr>
+  <tr><th>Functional {{ info("Functional status as reported by the source: functional, open reading frame (ORF), or pseudogene.") }}</th><td>{{ n.functional }}</td></tr>
+  <tr><th>Length</th><td>{{ n.length }} nt{% if n.has_ambiguity %} <span class="muted">· contains ambiguity</span>{% endif %}</td></tr>
+  {% if n.protein_uid %}
+  <tr><th>Protein UID {{ info("Shared by alleles whose nucleotide sequences differ but whose V-REGION amino-acid sequences are identical.", "/help#naming") }}</th><td><span class="uid">{{ n.protein_uid }}</span>
+      <span class="muted">(shared by alleles with the same V-REGION amino-acid sequence)</span></td></tr>
+  {% endif %}
+</table>
+</div>
+
+<h2 id="sequence">Coding sequence (nt)</h2>
+{% if n.composition %}
+<p class="hint">IMGT publishes this constant region as separate domain records, not as one
+   sequence. What is shown here is those domains concatenated in domain order:
+   <b>{{ n.composition.replace("+", " + ") }}</b>, which is the secreted form. The
+   membrane-bound form uses different 3' exons and is a separate transcript, not
+   represented here.</p>
+{% endif %}
+<div class="seq-block">
+  <div class="seq-head">
+    <span class="len">{{ n.length }} nt</span>
+    {% if n.subtype %}<span class="len">{{ n.subtype }}</span>{% endif %}
+    <button type="button" class="copy-btn" data-target="seq-nt">Copy</button>
+  </div>
+  <div class="seq" id="seq-nt">{{ n.sequence }}</div>
+</div>
+
+{% if n.sequence_aa %}
+<h2>Amino-acid sequence (V-REGION)</h2>
+<div class="seq-block">
+  <div class="seq-head">
+    <span class="len">{{ n.sequence_aa | length }} aa</span>
+    <button type="button" class="copy-btn" data-target="seq-aa">Copy</button>
+  </div>
+  <div class="seq" id="seq-aa">{{ n.sequence_aa }}</div>
+</div>
+{# Where this protein came from. The stored AA is always what the stored nucleotides
+   encode, so a published reference that disagrees with them is demoted, not stored.
+   A NULL origin (a row loaded before the column existed) says nothing at all, rather
+   than guessing; see loader.backfill_v_aa. #}
+{% if n.aa_origin == "translated" %}
+<p class="muted">Translated here from the nucleotide sequence; no source published a
+  protein for this allele. {{ info("The stored amino-acid sequence is the translation
+  of the nucleotides shown above, in the reading frame that yields the V-REGION.") }}</p>
+{% elif n.aa_origin == "translated_over_conflict" %}
+<p class="muted">Translated here from the nucleotide sequence. A source publishes a
+  different reference protein that these nucleotides do not encode; it is kept as an
+  <code>aa/imgt_reference_aa</code> annotation rather than stored as the sequence.
+  {{ info("The amino-acid sequence must stay consistent with the nucleotides it is
+  paired with. Where a published reference protein disagrees structurally, usually because
+  an insertion or deletion in the submitted sequence has been corrected or normalized upstream
+  without a corresponding change to the reference protein, storing it here would make the record
+  internally inconsistent. AIRBabel therefore stores the translation of the displayed nucleotide
+  sequence and records the published reference protein as an annotation.") }}</p>
+{% elif n.aa_origin == "sourced" %}
+<p class="muted">Published by the source, and consistent with the nucleotide sequence
+  above. {{ info("A sourced protein is stored as published only when it matches the
+  translation of the stored nucleotides.") }}</p>
+{% endif %}
+{% endif %}
+
+
+{# ===== Name history (record-intrinsic; the one item that stays — this record's
+   own labels over time, not a comparison. Everything comparative lives on the
+   similarity query, reached via "Find similar" below). ===== #}
+{% if n.category == 'coding' %}
+{% set has_history = n.first_seen or n.former_names or n.prev_versions or n.newer_version or n.archived %}
+<p class="namehist" id="lifecycle"><b>Name history</b> {{ info("This record's own labels over time: former IMGT names, earlier/later records of the same allele at different extents, and archival. Names are labels; the UID is the stable key.", "/help#naming") }}:
+  {% if not has_history %}<b>stable</b> &mdash; no former names, re-cuts, or archival on record.
+  {%- else -%}
+    {%- if n.first_seen %} first seen IMGT {{ n.first_seen }};{% endif %}
+    {%- for al in n.former_names %} formerly <span class="mono">{{ al.name }}</span> (to {{ al.release }});{% endfor %}
+    {%- for v in n.prev_versions %} re-cut from <a href="/seq/{{ v.uid }}"><span class="mono">{{ v.name }}</span></a> ({{ v.length }} nt);{% endfor %}
+    {%- if n.newer_version %} <b>superseded</b> by <a href="/seq/{{ n.newer_version.uid }}"><span class="mono">{{ n.newer_version.name }}</span></a> ({{ n.newer_version.length }} nt);{% endif %}
+    {%- if n.archived %} <b>archived</b> &mdash; removed from the current IMGT reference, kept reachable;{% endif %}
+  {%- endif %}
+</p>
+{% endif %}
+
+<h2 id="names">Allele names {{ info("Every name this sequence carries, each tagged with its naming scheme and the source that attributes it. None is privileged as canonical; the UID above is the key.", "/help#naming") }}</h2>
+{% if n.allele_names %}
+  {# "Duplicate alleles" = the same sequence carrying >1 distinct allele
+     designation, from any scheme/source (IMGT, OGRDB, VDJbase, KIMDB, …) or a
+     combination. Only iglabel is excluded: it is a deterministic, content-derived
+     label (a pure alias, always 1:1 with the sequence), not a designation. #}
+  {% set designations = n.allele_names | rejectattr("scheme", "equalto", "iglabel")
+                        | map(attribute="name") | unique | list %}
+  <p class="muted" style="font-size:13px;margin:2px 0 10px">Every name below denotes
+     <b>this exact sequence</b> ({{ n.uid }}). None is canonical; they are labels, and the UID is the key.</p>
+  {% if designations | length > 1 %}
+    <p class="notice"><b>Multiple allele designations.</b> This one sequence is recorded under
+       {{ designations | length }} different allele designations:
+       {% for d in designations %}<span class="mono">{{ d }}</span>{% if not loop.last %}, {% endif %}{% endfor %}.
+       These are identical normalized nucleotide sequences with different attributed names.</p>
+  {% endif %}
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>Name</th><th>Scheme</th><th>Source(s)</th></tr></thead>
+    <tbody>{% for g in n.allele_name_groups %}{{ alias_group_row(g) }}{% endfor %}</tbody>
+  </table>
+  </div>
+{% else %}<p class="muted">None.</p>{% endif %}
+
+{% if n.other_names %}
+<h2>Other names &amp; identifiers</h2>
+<p class="muted">Alternative and former names, e.g. IMGT clone names, plus accession identifiers.</p>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Name</th><th>Kind</th><th>Source(s)</th></tr></thead>
+  <tbody>{% for g in n.other_name_groups %}{{ alias_group_row(g) }}{% endfor %}</tbody>
+</table>
+</div>
+{% endif %}
+
+{% if n.former_names %}
+<h2>Former IMGT names {{ info("Earlier official IMGT designations for this exact sequence, recovered from historical IMGT/GENE-DB release snapshots. IMGT renamed or retired these designations; the current name is shown above, and searching a former name still resolves here.", "/help#naming") }}</h2>
+{% if n.archived and not n.newer_version %}<p class="notice">This record is <b>archived</b>: it is no longer present in the current IMGT reference under this sequence extent. It appeared in IMGT releases {{ n.first_seen }}{% if n.last_seen and n.last_seen != n.first_seen %}&ndash;{{ n.last_seen }}{% endif %} and is deferred from current coverage and default search. Its closest <b>current</b> alleles are listed under “Find similar” below.</p>{% endif %}
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Former name</th><th>Last seen in IMGT release</th></tr></thead>
+  <tbody>{% for al in n.former_names %}<tr><td><b>{{ al.name }}</b></td><td class="muted">{{ al.release }}</td></tr>{% endfor %}</tbody>
+</table>
+</div>
+{% endif %}
+
+{% if n.xrefs %}
+<h2>External records {{ info("External records for this exact normalized sequence. GenBank accession links are shown when available. IMGT and OGRDB links are shown only when that source attests the exact sequence. Allele names above are labels, not links.") }}</h2>
+<p>
+{% for x in n.xrefs %}
+  <span class="tag xref">{{ x.label }}:
+    {% if x.url %}<a href="{{ x.url }}" target="_blank" rel="noopener">{{ x.curie or "link" }}</a>
+    {% else %}{{ x.curie }}{% endif %}</span>
+{% endfor %}
+</p>
+{% endif %}
+
+{% if n.references %}
+{% set nseq = n.references | selectattr("kind", "equalto", "sequence") | list | length %}
+{% set nver = n.references | selectattr("kind", "equalto", "verified") | list | length %}
+{% set nname = n.references | selectattr("kind", "equalto", "name") | list | length %}
+<details class="collapse-card" id="references"{% if n.references | length <= 5 %} open{% endif %}>
+  <summary>
+    <span class="cc-title">Literature references</span>
+    <span class="cc-meta muted">{{ n.references | length }} total{% if nver %} · {{ nver }} verified{% endif %}{% if nseq %} · {{ nseq }} sequence-in-paper{% endif %}{% if nname %} · {{ nname }} name-mentioned*{% endif %}</span>
+    {{ info("Publications linked to this allele, tiered by how they were matched. Verified = from the curated tables or GenBank. Sequence-in-paper = the allele's exact sequence was found in the paper's full text or a supplementary file. Name-mentioned = matched by allele name only, auto-collected and not manually checked; a lead that may point to a same-named allele in another species.") }}
+  </summary>
+  <p class="muted">PubMed publications linked to this allele.
+     {% if nseq %}A <b>sequence-in-paper</b> match indicates that this allele's exact sequence was detected in the publication text or supplementary material; it is sequence-level evidence. {% endif %}
+     {% if nname %}<b>Name-mentioned</b> entries were auto-collected by name match and may refer to a different same-named allele; treat them as leads, not ground truth.{% endif %}</p>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>PMID</th><th>Title</th><th>Evidence</th><th>Source</th></tr></thead>
+    <tbody>
+    {% for r in n.references %}
+      <tr>
+        <td>{% if r.url %}<a href="{{ r.url }}" target="_blank" rel="noopener">{{ r.pmid }}</a>{% else %}{{ r.pmid }}{% endif %}</td>
+        <td class="muted">{{ r.title or "" }}</td>
+        <td>{% if r.kind == "verified" %}<span class="badge yes">verified</span>
+            {% elif r.kind == "sequence" %}<span class="badge seq" title="{{ r.detail or 'The allele sequence was found in the paper text/supplement (hash match)' }}">sequence in paper</span>
+            {% else %}<span class="badge lead" title="Auto-collected by allele-name match; not manually checked; may be a same-named allele in another species. An unconfirmed lead, not a wrong answer.">name mentioned<sup>*</sup></span>{% endif %}</td>
+        <td class="muted">{{ r.source or "" }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% if nname %}
+  <p class="muted" style="font-size:12px"><b>*</b> matched by allele <b>name</b> only. The
+     publication mentions this name, but AIRBabel cannot determine from the name alone whether it refers to <em>this</em> allele; the same name
+     can denote a different allele in another species. This is useful for literature review but is not verified evidence.</p>
+  {% endif %}
+</details>
+{% endif %}
+
+{% if n.sources %}
+<p class="muted" style="font-size:12.5px">Contributed by
+  {% for s in n.sources %}<b>{{ s.name }}</b>{% if not loop.last %}, {% endif %}{% endfor %}.
+  See <a href="/sources">Sources &amp; citations</a> for each source's version, citation and licence.</p>
+{% endif %}
+
+{% if n.rss %}
+<h2>RSS {{ info("Recombination signal sequences (RSSs) flanking the allele; click an RSS UID to see every coding allele linked to that exact RSS.") }}</h2>
+<p class="muted">Recombination signal sequences flanking this allele. Click one to see
+   every coding allele linked to that exact RSS variant.</p>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Part</th><th>Sequence</th><th>Source</th><th>RSS UID</th></tr></thead>
+  <tbody>
+  {% for r in n.rss %}
+    <tr><td>{{ r.subtype }}</td><td class="mono">{{ r.sequence }}</td>
+        <td>{% for s in r.sources %}<span class="tag">{{ s }}</span> {% endfor %}</td>
+        <td><a class="uid" href="/rss/{{ r.uid }}">{{ r.uid }}</a></td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+
+{% if n.leaders %}
+<h2>Leader</h2>
+<p class="muted">Signal-peptide coding sequence (spliced exon&nbsp;1 + exon&nbsp;2). The genomic intron
+   between the two exons is deferred.</p>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Leader (exon&nbsp;1 + exon&nbsp;2)</th><th>Split</th><th>Source</th><th>Leader UID</th></tr></thead>
+  <tbody>
+  {% for l in n.leaders %}
+    <tr>
+      <td class="mono">{% if l.exon1_len %}<b title="exon 1">{{ l.sequence[:l.exon1_len] }}</b>{{ l.sequence[l.exon1_len:] }}{% else %}{{ l.sequence }}{% endif %}</td>
+      <td class="muted">{% if l.exon1_len %}{{ l.exon1_len }} + {{ l.sequence | length - l.exon1_len }} nt{% else %}{{ l.sequence | length }} nt{% endif %}</td>
+      <td>{% for s in l.sources %}<span class="tag">{{ s }}</span> {% endfor %}</td>
+      <td><a class="uid" href="/leader/{{ l.uid }}">{{ l.uid }}</a></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+
+<h2>Find similar (nt &middot; aa &middot; cross-species) {{ info("The comparison surface. Runs a similarity query seeded with this sequence; each hit can be expanded to show the exact nt differences, the synonymous / non-synonymous consequence, the IMGT-gapped alignment, and cross-species reciprocal best hits. A comparison only exists in a query, so it lives here, not on the record.") }}</h2>
+<p class="hint">Everything comparative about this sequence (the exact differences to other
+   alleles, protein consequence, IMGT alignment, cross-species nearest) is shown
+   <b>per hit</b> in the results of this query.</p>
+{% if n.similarity_note %}
+<p class="notice">Restricted for {{ n.segment }} genes: only <b>{{ n.length }} nt</b> alleles
+   are compared, position by position. {{ n.similarity_note }}</p>
+{% endif %}
+<form class="search" method="get" action="/seq/{{ n.uid }}/similar">
+  <label>by
+    <select name="kind">
+      <option value="nt">nucleotide</option>
+      {% if n.sequence_aa %}<option value="aa">amino acid</option>{% endif %}
+    </select>
+  </label>
+  <label>min identity
+    <select name="min">
+      {% for v, lbl in [(0.99,"99%"),(0.97,"97%"),(0.95,"95%"),(0.90,"90%"),(0.80,"80%")] %}
+        <option value="{{ v }}" {% if v == 0.95 %}selected{% endif %}>{{ lbl }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label><input type="checkbox" name="cross_species" value="1"> include other species</label>
+  <input type="hidden" name="back" value="/seq/{{ n.uid }}">
+  <button type="submit">Find similar</button>
+</form>
+<p class="hint">Ranks {% if n.similarity_note %}{{ n.segment }} alleles of the same length,
+   by positional identity{% else %}coding alleles by normalized edit-distance identity{% endif %}.
+   Also available at <code>/api/sequences/{{ n.uid }}/similar?min_identity=0.95&kind=nt</code>.</p>
+
+<p class="api-links">
+  API: <a href="/api/sequences/{{ n.uid }}">JSON</a> ·
+  <a href="/api/sequences/{{ n.uid }}?view=airr">AIRR AlleleDescription</a> ·
+  <a href="/api/sequences/{{ n.uid }}/aliases">aliases</a>
+</p>
+{% endblock %}

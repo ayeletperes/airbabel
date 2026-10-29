@@ -1,0 +1,242 @@
+{% extends "base.html" %}
+{% import "_charts.html" as charts %}
+{% block description %}Coverage of the AIRBabel germline reference: IG and TR allele counts per species, locus and segment (V, D, J, C), sequence-length distributions, and agreement between sources such as IMGT and OGRDB.{% endblock %}
+{% block title %}Overview &middot; AIRBabel{% endblock %}
+{% block body %}
+<style>
+  .ov-intro { margin: 4px 0 14px; }
+  .ov-intro h1 { font-size: 22px; margin: 0 0 6px; letter-spacing: -.01em; }
+  .ov-intro .sub { color: var(--muted); font-size: 14.5px; max-width: 800px; margin: 0; }
+
+  .ov-stats { display: flex; flex-wrap: wrap; gap: 6px 26px; margin: 14px 2px 22px; }
+  .ov-stats span { font-size: 13px; color: var(--muted); }
+  .ov-stats b { color: var(--fg); font-size: 18px; font-variant-numeric: tabular-nums;
+                margin-right: 5px; letter-spacing: -.01em; }
+
+  .ov-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 0 0 16px; }
+  .ov-pick .lbl { font-size: 13px; color: var(--muted); }
+
+  .ov-card { background: var(--surface); border: 1px solid var(--line);
+             border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px 18px; margin-bottom: 16px; }
+  /* h2, not h3: nothing sits between them and the page h1 (heading order).
+     Reset the site-wide h2 look so the cards read as before. */
+  .ov-card h2 { font-size: 15px; margin: 0 0 3px; letter-spacing: -.01em; text-transform: none;
+    color: var(--fg); padding: 0; border: 0; }
+  .ov-card .h-sub { font-size: 12.5px; color: var(--muted); margin: 0 0 13px; }
+  .ov-empty { color: var(--muted); font-size: 13.5px; margin: 4px 2px; }
+  .ov-note { font-size: 12px; color: var(--muted); margin: 11px 2px 0; }
+  .ov-scroll { overflow-x: auto; }
+
+  /* content-width tables (override the global width:100%) so they don't stretch */
+  .ov-card table.locus-table, .ov-card table.cov-table, .ov-card table.conc-table {
+     width: auto; border-collapse: collapse; font-size: 13px; }
+
+  .locus-table th, .locus-table td { padding: 6px 13px; border-bottom: 1px solid var(--line);
+     white-space: nowrap; }
+  .locus-table thead th { font-size: 11px; text-transform: uppercase; letter-spacing: .05em;
+     color: var(--muted); font-weight: 600; }
+  .locus-table td, .locus-table th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .locus-table th.sp { text-align: left; font-weight: 500; color: var(--fg); position: sticky; left: 0;
+     background: var(--surface); }
+  .locus-table tbody tr:hover { background: var(--surface-alt); }
+  .locus-table tbody tr:hover th.sp { background: var(--surface-alt); }
+  .locus-table td.zero { color: var(--line-strong); }
+  .locus-table .tot { font-weight: 700; color: var(--fg); border-left: 1px solid var(--line); }
+  .locus-table tfoot th, .locus-table tfoot td { border-top: 2px solid var(--line-strong); border-bottom: none;
+     font-weight: 700; padding-top: 8px; }
+  .locus-table thead th.loc-ig { color: #2f6fe0; }
+  .locus-table thead th.loc-tr { color: #9a5a24; }
+
+  .cov-table th, .cov-table td { padding: 5px 10px; border-bottom: 1px solid var(--line); }
+  .cov-table thead th { font-size: 11px; color: var(--muted); font-weight: 600; }
+  .conc-table th, .conc-table td { padding: 5px 9px; }
+  /* interactive locus table: clickable cells + species, sortable headers */
+  .locus-table th.sortable { cursor: pointer; }
+  .locus-table th.sp a, .locus-table td a.cl { color: inherit; text-decoration: none; }
+  .locus-table th.sp a:hover, .locus-table td a.cl:hover { color: var(--accent); text-decoration: underline; }
+  .locus-table td a.cl { display: inline-block; padding: 1px 4px; margin: -1px -4px; border-radius: 5px; }
+  .locus-table td a.cl:hover { background: var(--accent-soft); text-decoration: none; }
+
+  /* compact scrollable panel so the 30-species table doesn't run the whole page */
+  .ov-scroll.tall { max-height: 432px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; }
+  .locus-table thead th { background: var(--surface); }
+  .ov-scroll.tall thead th { position: sticky; top: 0; z-index: 2; box-shadow: 0 1px 0 var(--line); }
+  .ov-scroll.tall thead th.sp { z-index: 3; }
+  .ov-scroll.tall + .ov-note { margin-top: 9px; }
+
+  /* the dense source matrices live behind a collapse so the page reads clean */
+  .ov-more { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface);
+             box-shadow: var(--shadow); margin-bottom: 16px; }
+  .ov-more > summary { cursor: pointer; padding: 14px 18px; font-size: 15px; font-weight: 600;
+             color: var(--fg); letter-spacing: -.01em; list-style: none; }
+  .ov-more > summary::-webkit-details-marker { display: none; }
+  .ov-more > summary::before { content: "\25B8"; color: var(--accent); margin-right: 9px;
+             display: inline-block; transition: transform .15s; }
+  .ov-more[open] > summary::before { transform: rotate(90deg); }
+  .ov-more > summary .s-sub { display: block; font-size: 12.5px; font-weight: 400; color: var(--muted);
+             margin: 4px 0 0 21px; }
+  .ov-more .ov-card { border: 0; box-shadow: none; border-radius: 0; margin: 0;
+             border-top: 1px solid var(--line); }
+</style>
+
+<div class="ov-intro">
+  <h1>Dataset overview</h1>
+  <p class="sub">Coding allele sequence counts by <b>segment</b>, <b>locus</b> and
+     <b>species</b>, with allele length distributions and cross-source concordance.</p>
+</div>
+
+<div class="ov-stats">
+  {% for s in stats.segments %}<span><b>{{ "{:,}".format(stats.by_segment.get(s, 0)) }}</b>{{ s }} alleles</span>{% endfor %}
+  <span><b>{{ stats.all_loci | length }}</b>loci</span>
+  <span><b>{{ stats.species | length }}</b>species</span>
+  <span><b>{{ stats.sources | length }}</b>sources</span>
+  <span><b>{{ "{:,}".format(stats.rss) }}</b>RSS</span>
+  <span><b>{{ "{:,}".format(stats.leader) }}</b>leaders</span>
+</div>
+
+<section class="ov-card">
+  <h2>V alleles by locus</h2>
+  <p class="h-sub">Current <b>V</b> allele sequence counts by species and locus
+     (<span style="color:#2f6fe0">immunoglobulin, IG</span>; <span style="color:#9a5a24">T-cell receptor, TR</span>; archived records excluded).
+     Other segments are reported separately because combining segment classes would produce totals with heterogeneous denominators.</p>
+  <div class="ov-scroll tall">
+  <table class="locus-table" id="locusTable">
+    <thead><tr>
+      <th class="sp sortable" data-k="sp">Species</th>
+      {% for l in stats.all_loci %}<th class="num sortable {{ 'loc-tr' if l.startswith('TR') else 'loc-ig' }}" data-k="{{ l | lower }}" data-dir="desc">{{ l }}</th>{% endfor %}
+      <th class="num tot sortable" data-k="total" data-dir="desc">Total</th>
+    </tr></thead>
+    <tbody>
+    {% for sp in stats.species if sp.v %}
+      <tr data-sp="{{ sp.label }}" data-total="{{ sp.v }}"{% for l in stats.all_loci %} data-{{ l | lower }}="{{ sp.loci_counts.get(l, 0) }}"{% endfor %}>
+        <th class="sp"><a href="/overview?species={{ sp.tag | lower }}" title="Narrow the charts below to {{ sp.label }}">{{ sp.label }}</a></th>
+        {% for l in stats.all_loci %}
+          {% set c = sp.loci_counts.get(l, 0) %}
+          {% if c %}<td><a class="cl" href="/?q={{ l }}V&amp;mode=name&amp;species={{ sp.tag | lower }}" title="Browse {{ l }}V alleles in {{ sp.label }}">{{ "{:,}".format(c) }}</a></td>
+          {% else %}<td class="zero">·</td>{% endif %}
+        {% endfor %}
+        <td class="tot">{{ "{:,}".format(sp.v) }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+    <tfoot><tr>
+      <th class="sp">All species</th>
+      {% for l in stats.all_loci %}<td class="num">{{ "{:,}".format(stats.locus_totals.get(l, 0)) }}</td>{% endfor %}
+      <td class="tot">{{ "{:,}".format(stats.by_segment.get('V', 0)) }}</td>
+    </tr></tfoot>
+  </table>
+  </div>
+  <p class="ov-note">Click a <b>count</b> to browse those alleles · a <b>column header</b> to sort ·
+     a <b>species</b> to narrow the charts below.</p>
+</section>
+
+{# One table per non-V segment, driven by stats.segments rather than named here, so a
+   newly ingested segment appears instead of falling silently outside the page. #}
+{% set seg_blurb = {
+     "J": "J is a smaller, more conserved segment than V, so counts are an order of
+           magnitude lower; this reflects segment biology rather than a metadata gap.",
+     "D": "D genes are very short (tens of nucleotides), which is why they are counted
+           here but carry no similarity ranking.",
+     "C": "Heavy-chain constant regions are assembled from the domains IMGT publishes
+           separately (CH1, hinge, CH2, CH3…); each allele page lists the exact
+           composition. Light-chain C regions are published whole. The secreted form is
+           stored; the membrane-bound form is a separate transcript and is deferred.",
+   } %}
+{% for s in stats.segments if s != "V" %}
+{% if stats.by_segment.get(s) %}
+<section class="ov-card">
+  <h2>{{ s }} alleles by locus</h2>
+  <p class="h-sub">Current <b>{{ s }}</b> counts per species and locus.
+     {{ seg_blurb.get(s, "") }}</p>
+  {# scrollable like the V table so a 30-species segment doesn't run the page #}
+  <div class="ov-scroll tall">
+  <table class="locus-table">
+    <thead><tr>
+      <th class="sp">Species</th>
+      {% for l in stats.all_loci %}<th class="num {{ 'loc-tr' if l.startswith('TR') else 'loc-ig' }}">{{ l }}</th>{% endfor %}
+      <th class="num tot">Total</th>
+    </tr></thead>
+    <tbody>
+    {% for sp in stats.species | sort(attribute='by_segment.' ~ s, reverse=true) %}
+      {% set n = sp.by_segment.get(s, 0) %}
+      {% if n %}
+      <tr>
+        <th class="sp">{{ sp.label }}</th>
+        {% for l in stats.all_loci %}
+          {% set c = sp.seg_loci_counts.get(s, {}).get(l, 0) %}
+          {% if c %}<td>{{ "{:,}".format(c) }}</td>{% else %}<td class="zero">·</td>{% endif %}
+        {% endfor %}
+        <td class="tot">{{ "{:,}".format(n) }}</td>
+      </tr>
+      {% endif %}
+    {% endfor %}
+    </tbody>
+    <tfoot><tr>
+      <th class="sp">All species</th>
+      {% for l in stats.all_loci %}<td class="num">{{ "{:,}".format(stats.seg_locus_totals.get(s, {}).get(l, 0)) }}</td>{% endfor %}
+      <td class="tot">{{ "{:,}".format(stats.by_segment.get(s, 0)) }}</td>
+    </tr></tfoot>
+  </table>
+  </div>
+</section>
+{% endif %}
+{% endfor %}
+
+<form class="search ov-pick" method="get" action="/overview">
+  <span class="lbl">Narrow the charts below to one species:</span>
+  <select name="species" aria-label="Species" onchange="this.form.submit()">
+    <option value="">all species</option>
+    {% for s in stats.species %}
+      <option value="{{ s.tag | lower }}" {% if (s.tag | lower) == species | lower %}selected{% endif %}>{{ s.label }}</option>
+    {% endfor %}
+  </select>
+  <noscript><button type="submit">Show</button></noscript>
+</form>
+
+{% set sp_label = (stats.species | selectattr('tag', 'equalto', species | upper) | map(attribute='label') | first) if species else '' %}
+{% for s, dist in length_dists.items() %}
+<section class="ov-card">
+  <h2>{{ s }} allele length distribution{% if species %} for {{ sp_label or species }}{% endif %}</h2>
+  {{ charts.length_distribution(dist) }}
+</section>
+{% else %}
+<section class="ov-card"><p class="ov-empty">No coding alleles{% if species %} for {{ sp_label or species }}{% endif %}.</p></section>
+{% endfor %}
+
+<details class="ov-more">
+  <summary>Source coverage &amp; concordance
+    <span class="s-sub">Source coverage and sequence concordance by species. Expand for the full matrices.</span>
+  </summary>
+  <section class="ov-card">
+    <h2>Sources by species</h2>
+    <p class="h-sub">Sources contributing allele records to each species.</p>
+    {{ charts.coverage(stats) }}
+  </section>
+  <section class="ov-card">
+    <h2>Source concordance{% if species %} for {{ sp_label or species }}{% endif %}</h2>
+    {% if source_conc %}{{ charts.source_concordance(source_conc) }}
+    {% else %}<p class="ov-empty">No coding alleles{% if species %} for {{ sp_label or species }}{% endif %}.</p>{% endif %}
+    {% if not species %}<p class="ov-note">All sources across all species; cells comparing sources from different species are undefined by design. Pick a species above to compare its sources.</p>{% endif %}
+  </section>
+</details>
+
+<script>
+(function () {
+  var t = document.getElementById("locusTable"); if (!t) return;
+  var tb = t.querySelector("tbody");
+  t.querySelectorAll("th.sortable").forEach(function (th) {
+    th.addEventListener("click", function () {
+      var k = th.getAttribute("data-k"), num = th.classList.contains("num");
+      var asc = !th.classList.contains("asc");
+      t.querySelectorAll("th.sortable").forEach(function (h) { h.classList.remove("asc", "desc"); });
+      th.classList.add(asc ? "asc" : "desc");
+      Array.prototype.slice.call(tb.querySelectorAll("tr")).sort(function (a, b) {
+        var x = a.getAttribute("data-" + k) || "", y = b.getAttribute("data-" + k) || "";
+        return num ? (asc ? (parseFloat(x) || 0) - (parseFloat(y) || 0) : (parseFloat(y) || 0) - (parseFloat(x) || 0))
+                   : (asc ? x.localeCompare(y) : y.localeCompare(x));
+      }).forEach(function (r) { tb.appendChild(r); });
+    });
+  });
+})();
+</script>
+{% endblock %}

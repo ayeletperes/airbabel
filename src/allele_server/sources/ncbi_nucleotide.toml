@@ -1,0 +1,43 @@
+schema_version = 1
+
+slug = "ncbi_nucleotide"
+name = "ncbi_nucleotide"
+label = "NCBI Nucleotide (GenBank)"
+aliases = ["GenBank", "nuccore"]
+role = "external"
+description = """\
+Primary public accession records for submitted nucleotide sequences. AIRBabel uses \
+GenBank as a cross-reference layer, not as a contributed curated germline set."""
+homepage_url = "https://www.ncbi.nlm.nih.gov/nuccore/"
+curie_prefix = "GENBANK"
+
+[licence]
+status = "declared"
+name = "Public domain (NCBI)"
+url = "https://www.ncbi.nlm.nih.gov/home/about/policies/"
+# We hold accession cross-references, not GenBank content, so there is nothing of
+# GenBank's to republish either way.
+redistributable = true
+note = "NCBI places its own database records in the public domain; the underlying submissions remain the submitters' deposits."
+
+[citation]
+status = "verified"
+text = """\
+Sayers EW, Cavanaugh M, Frisse L, Pruitt KD, Schneider VA, Underwood BA, Yankie L, \
+Karsch-Mizrachi I. GenBank 2025 update. Nucleic Acids Research. 2025;53(D1):D56-D61."""
+doi = "10.1093/nar/gkae1114"
+pmid = "39558184"
+
+[scope]
+categories = ["coding"]
+
+[ingest]
+module = "allele_server.ingest.ncbi"
+published = false
+note = "An enrichment cross-reference layer, not a contributed germline set: it confirms accessions and adds xref annotations. Excluded from the credited-contributor list for that reason — an allele's accession is credited to its depositor, not to NCBI."
+
+[approval]
+candidate = "manual:ncbi_nucleotide"
+approved_by = "Ayelet Peres"
+approved_at = 2026-07-29T00:00:00Z
+note = "Pre-existing source, retro-approved during the source-policy migration. Citation resolved to the current GenBank database paper, closing a TODO(citation)."

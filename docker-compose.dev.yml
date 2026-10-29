@@ -1,0 +1,23 @@
+# Dev Postgres for allele_server. Binds to localhost only.
+# Start with:  docker compose -f docker-compose.dev.yml up -d
+services:
+  db:
+    image: postgres:16
+    container_name: allele_server_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: allele
+      POSTGRES_PASSWORD: allele
+      POSTGRES_DB: allele_server
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - allele_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U allele -d allele_server"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  allele_pgdata:

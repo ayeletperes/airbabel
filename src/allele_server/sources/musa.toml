@@ -1,0 +1,43 @@
+schema_version = 1
+
+slug = "musa"
+name = "MUSA"
+label = "MUSA"
+role = "internal"
+description = """\
+Internal curated rhesus macaque set (Yaari Lab) aggregating KIMDB, RhGLDB+, VRC and Guo \
+et al., each credited as a first-class source."""
+curie_prefix = "MUSA"
+homepage_url = "https://vdjbase.org/reference_book/Rhesus_Macaque"
+
+[licence]
+status = "declared"
+name = "Released with the publication; redistribution permitted with attribution"
+url = "https://vdjbase.org/reference_book/Rhesus_Macaque"
+redistributable = true
+note = "Not a standard licence instrument: no CC tag is attached to the data on the reference book page, and the Immunity article's own terms cover the article rather than the set. Recorded on 2026-08-04 on the authority of the set's maintainer and the paper's first author, who confirmed MUSA was released as part of the manuscript and may be redistributed. Attribution is the citation below. Replace with the licence name if a formal one is ever attached. The aggregated sub-sources keep their own terms — see kimdb, rhgldb, vrc, guo."
+
+[citation]
+status = "verified"
+text = """\
+Peres A, Upadhyay AA, Klein V, Saha S, Rodriguez OL, Vanwinkle ZM, et al. \
+Population-level genomic analysis of immunoglobulin loci variation in rhesus macaques \
+reveals extensive germline diversity. Immunity. 2026;59(1):213-228.e6."""
+doi = "10.1016/j.immuni.2025.12.002"
+note = "The aggregated sub-sources (KIMDB, RhGLDB+, VRC, Guo) still carry their own citations and must be credited individually; this reference covers the curated set, not the data it aggregates."
+
+[scope]
+species = ["RHESUS"]
+loci = ["IGH", "IGK", "IGL"]
+segments = ["V"]
+categories = ["coding"]
+
+[ingest]
+module = "allele_server.ingest.curation_table"
+published = true
+
+[approval]
+candidate = "manual:musa"
+approved_by = "Ayelet Peres"
+approved_at = 2026-07-29T00:00:00Z
+note = "Pre-existing internal source, retro-approved during the source-policy migration."

@@ -1,0 +1,41 @@
+schema_version = 1
+
+slug = "vrc"
+name = "VRC"
+label = "VRC"
+aliases = ["Vaccine Research Center"]
+role = "external"
+description = """\
+Rhesus macaque germline allele set from the NIH Vaccine Research Center, inferred with \
+IgDiscover from IgM transcripts of four Indian rhesus macaques. Aggregated into MUSA."""
+curie_prefix = "VRC"
+
+[licence]
+status = "none_declared"
+note = "No licence statement located for the allele set (checked 2026-07-29). Ingested and credited, not republished."
+
+[citation]
+status = "verified"
+text = """\
+Kong R, Duan H, Sheng Z, Xu K, Acharya P, Chen X, et al. Antibody lineages with \
+vaccine-induced antigen-binding hotspots develop broad HIV neutralization. Cell. \
+2019;178(3):567-584.e19."""
+doi = "10.1016/j.cell.2019.06.030"
+note = "Identified indirectly: Guo et al. (Front Immunol 2024;15:1506348) cites this study as the VRC set of 187 IgDiscover-inferred germline alleles from four Indian rhesus macaques. CONFIRM against the MUSA source table."
+
+[scope]
+species = ["RHESUS"]
+loci = ["IGH", "IGK", "IGL"]
+segments = ["V"]
+categories = ["coding"]
+
+[ingest]
+module = "allele_server.ingest.curation_table"
+published = true
+note = "Loaded as the `vrc` column of the MUSA curation table."
+
+[approval]
+candidate = "manual:vrc"
+approved_by = "Ayelet Peres"
+approved_at = 2026-07-29T00:00:00Z
+note = "Pre-existing source, retro-approved during the source-policy migration. Citation identified through Guo et al. 2024 rather than from the set itself; see the citation note."

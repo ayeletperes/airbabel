@@ -1,0 +1,45 @@
+schema_version = 1
+
+slug = "rhgldb"
+name = "RhGLDB+"
+label = "RhGLDB+"
+# Every spelling this source has been written as, here and elsewhere. Before the
+# manifests, curie.py called it RHGLDB and the metadata table called it RhGLDB+, and
+# nothing connected the two.
+aliases = ["RHGLDB", "RhGLDB", "rhgldb+", "Rhesus Macaque Germline Database"]
+role = "external"
+description = """\
+Rhesus macaque germline database (extended), built on the germline gene set annotated \
+from multiple de novo rhesus genome assemblies. Aggregated into MUSA."""
+curie_prefix = "RHGLDB"
+
+[licence]
+status = "none_declared"
+note = "No licence statement located for the extended compilation (checked 2026-07-29). Ingested and credited, not republished."
+
+[citation]
+status = "verified"
+text = """\
+Ramesh A, Darko S, Hua A, Overman G, Ransier A, Francica JR, et al. Structure and \
+Diversity of the Rhesus Macaque Immunoglobulin Loci through Multiple De Novo Genome \
+Assemblies. Frontiers in Immunology. 2017;8:1407."""
+doi = "10.3389/fimmu.2017.01407"
+pmid = "29163486"
+note = "RhGLDB+ is the extended compilation over RhGLDB; no separate publication for the extension could be verified, so the base database paper is credited. CONFIRM: if the extension has its own reference, replace this."
+
+[scope]
+species = ["RHESUS"]
+loci = ["IGH", "IGK", "IGL"]
+segments = ["V"]
+categories = ["coding"]
+
+[ingest]
+module = "allele_server.ingest.curation_table"
+published = true
+note = "Loaded as the `rhgldb+` column of the MUSA curation table."
+
+[approval]
+candidate = "manual:rhgldb"
+approved_by = "Ayelet Peres"
+approved_at = 2026-07-29T00:00:00Z
+note = "Pre-existing source, retro-approved during the source-policy migration. Citation attributed to the base RhGLDB paper; see the citation note — this one is worth a second look by whoever assembled the MUSA table."

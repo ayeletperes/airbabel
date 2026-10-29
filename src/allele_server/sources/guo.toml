@@ -1,0 +1,44 @@
+schema_version = 1
+
+slug = "guo"
+name = "Guo"
+label = "Guo et al."
+aliases = ["GUO", "Guo et al"]
+role = "external"
+description = """\
+Rhesus macaque immunoglobulin germline alleles identified by three independent \
+sequencing approaches (gDNA TOPO, gDNA MiSeq, IgDiscover). Aggregated into MUSA."""
+curie_prefix = "GUO"
+
+[licence]
+status = "declared"
+name = "CC BY 4.0"
+url = "https://creativecommons.org/licenses/by/4.0/"
+redistributable = true
+note = "Frontiers in Immunology publishes open access under CC BY 4.0 (read 2026-07-29)."
+
+[citation]
+status = "verified"
+text = """\
+Guo Y, Waltari E, Lu H, Sheng Z, Wu X. Novel rhesus macaque immunoglobulin germline \
+genes identified by three sequencing approaches. Frontiers in Immunology. \
+2024;15:1506348."""
+doi = "10.3389/fimmu.2024.1506348"
+pmid = "39776901"
+
+[scope]
+species = ["RHESUS"]
+loci = ["IGH", "IGK", "IGL"]
+segments = ["V"]
+categories = ["coding"]
+
+[ingest]
+module = "allele_server.ingest.curation_table"
+published = true
+note = "Loaded as the `guo` column of the MUSA curation table."
+
+[approval]
+candidate = "manual:guo"
+approved_by = "Ayelet Peres"
+approved_at = 2026-07-29T00:00:00Z
+note = "Pre-existing source, retro-approved during the source-policy migration. Citation resolved to the Front Immunol 2024 paper, closing a TODO(citation)."

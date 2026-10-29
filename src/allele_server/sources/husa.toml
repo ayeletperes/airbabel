@@ -1,0 +1,35 @@
+schema_version = 1
+
+slug = "husa"
+name = "HUSA"
+label = "HUSA"
+role = "internal"
+description = """\
+Internal curated human allele set (Yaari Lab), contributing its own IgLabel \
+designations, never an IMGT nomenclature claim."""
+curie_prefix = "HUSA"
+
+[licence]
+status = "none_declared"
+note = "Internal lab set; no licence has been published for it yet. Redistribution stays off until one is chosen."
+
+[citation]
+status = "none_available"
+note = "The HUSA manuscript is in preparation. Until it is published there is no reference to cite; provisional attribution is the Yaari Lab. Revisit on publication."
+
+[scope]
+species = ["HUMAN"]
+loci = ["IGH", "IGK", "IGL"]
+segments = ["V"]
+categories = ["coding"]
+
+[ingest]
+module = "allele_server.ingest.curation_table"
+published = true
+note = "Curation table; ingest/internal.py is the legacy FASTA path for the same set."
+
+[approval]
+candidate = "manual:husa"
+approved_by = "Ayelet Peres"
+approved_at = 2026-07-29T00:00:00Z
+note = "Pre-existing internal source, retro-approved during the source-policy migration."

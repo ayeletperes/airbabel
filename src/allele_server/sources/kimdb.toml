@@ -1,0 +1,41 @@
+schema_version = 1
+
+slug = "kimdb"
+name = "KIMDB"
+label = "KIMDB"
+aliases = ["Karolinska Institutet Macaque Database"]
+role = "external"
+description = """\
+Macaque immunoglobulin heavy-chain germline VDJ alleles inferred with IgDiscover from 45 \
+rhesus and cynomolgus macaques. Aggregated into MUSA."""
+homepage_url = "http://kimdb.gkhlab.se/"
+curie_prefix = "KIMDB"
+
+[licence]
+status = "none_declared"
+note = "No licence statement found on kimdb.gkhlab.se (checked 2026-07-29; the site was unreachable over HTTPS at the time of checking). Ingested and credited, not republished, until terms are confirmed."
+
+[citation]
+status = "verified"
+text = """\
+Vázquez Bernat N, Corcoran M, Nowak I, Kaduk M, Castro Dopico X, Narang S, et al. Rhesus \
+and cynomolgus macaque immunoglobulin heavy-chain genotyping yields comprehensive \
+databases of germline VDJ alleles. Immunity. 2021;54(2):355-366.e4."""
+doi = "10.1016/j.immuni.2020.12.018"
+
+[scope]
+species = ["RHESUS"]
+loci = ["IGH"]
+segments = ["V"]
+categories = ["coding"]
+
+[ingest]
+module = "allele_server.ingest.curation_table"
+published = true
+note = "Loaded as the `kimdb` column of the MUSA curation table."
+
+[approval]
+candidate = "manual:kimdb"
+approved_by = "Ayelet Peres"
+approved_at = 2026-07-29T00:00:00Z
+note = "Pre-existing source, retro-approved during the source-policy migration. Citation resolved to the Immunity 2021 database paper, closing a TODO(citation)."

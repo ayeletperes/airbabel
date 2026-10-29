@@ -1,0 +1,61 @@
+schema_version = 1
+
+slug = "imgt"
+name = "IMGT"
+label = "IMGT/GENE-DB"
+aliases = ["IMGT/GENE-DB", "IMGT GENE-DB", "imgt_genedb"]
+role = "external"
+description = """\
+The international ImMunoGeneTics information system reference directory of IG/TR genes \
+and alleles, across species."""
+homepage_url = "https://www.imgt.org/genedb/"
+curie_prefix = "IMGT/GENE-DB"
+curie_url_template = "https://www.imgt.org/genedb/"
+
+[licence]
+status = "declared"
+name = "CC BY 4.0"
+url = "https://creativecommons.org/licenses/by/4.0/"
+redistributable = true
+note = "IMGT publishes under CC BY 4.0 and states the attribution it requires; see citation. Re-verified 2026-08-05 against https://www.imgt.org/about/termsofuse.php: \"The IMGT® data are provided to both public and private users under the CC BY-4.0 license.\" This is recent — IMGT moved from CC BY-NC-ND 4.0 to CC BY 4.0 on 2026-07-01, and CC BY-NC-ND would not have permitted our export. Second-hand descriptions written before that date still say NC-ND (the genedb-releases README does); do not \"correct\" this entry from one of them without re-reading IMGT's own terms page. IMGT's name must not be used in publicity or business promotion without written approval."
+
+[citation]
+status = "verified"
+# IMGT publishes the exact attribution it requires. Quote that rather than a paper:
+# citing a NAR update article would not satisfy the licence on its own.
+text = """\
+IMGT®, the international ImMunoGeneTics information system®, https://www.imgt.org \
+(founder and director: Marie-Paule Lefranc, Montpellier, France)."""
+note = "The database-update paper (Manso et al., Nucleic Acids Res 2022;50:D1262) is a companion reference, not a replacement for the required attribution above."
+
+[scope]
+loci = ["IGH", "IGK", "IGL", "TRA", "TRB", "TRG", "TRD"]
+segments = ["V", "D", "J"]
+categories = ["coding", "leader", "rss"]
+
+[ingest]
+module = "allele_server.ingest.imgt_genedb"
+published = true
+note = """\
+The multi-species backbone. Also loaded via imgt_history and imgt_crawl, \
+each as its own (name, version) row.
+
+Delivery channels, because one of them is not IMGT's own server. Current releases come \
+direct from imgt.org (imgt_genedb._BULK_URL, and GENElect for leaders/RSS). Historical \
+releases come from Jamie Heather's genedb-releases archive, \
+https://github.com/JamieHeather/genedb-releases, which recovered pre-2022 releases via \
+the Internet Archive Wayback Machine and has snapshotted GENE-DB weekly since 2023 \
+(GitHub Actions since v0.1.1). Credit and thanks to Jamie for assembling them; all 12 \
+historical snapshots we hold came from there, and without them the former-name and \
+record-revision history would not exist. The data is IMGT's and is attributed to IMGT \
+under the licence above, which is why the archive is a channel note rather than a \
+source of its own. Written down here rather than only in imgt_history.py's docstring \
+because change tracking (backlog item 16) makes the archive a trigger for ingest, and a \
+dependency that can gate loading belongs where the source policy can see it."""
+auto_update = true
+
+[approval]
+candidate = "manual:imgt"
+approved_by = "Ayelet Peres"
+approved_at = 2026-07-29T00:00:00Z
+note = "Pre-existing source, retro-approved during the source-policy migration. Licence and attribution carried over unchanged from sources_meta.py, where both were already verified."

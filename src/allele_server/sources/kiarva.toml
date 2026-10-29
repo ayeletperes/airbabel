@@ -1,0 +1,49 @@
+schema_version = 1
+
+slug = "kiarva"
+name = "KIARVA"
+label = "KIARVA"
+aliases = ["Karolinska Institutet Adaptive Immune Receptor Gene Variant Atlas", "KI cohort"]
+role = "external"
+description = """\
+The Karolinska Institutet Adaptive Immune Receptor Gene Variant Atlas: an open-access \
+atlas of human IG gene variation, built from ultra-high-throughput IGH genotyping of 25 \
+global populations."""
+# The namespace for KIARVA's own per-allele identifiers (db_name), not for citing
+# the paper -- the DOI lives in [citation]. It was "DOI", which made every
+# cross-reference read DOI:IGHV3-49*04_S4009: not a DOI, and unlike every sibling
+# set (HUSA, MUSA, KIMDB, OGRDB, VRC, GUO, RHGLDB), each of which namespaces its
+# records under its own name. Nothing consumed the old prefix: the attribution
+# call it would have keyed was never made.
+curie_prefix = "KIARVA"
+
+[licence]
+status = "none_declared"
+note = "Described as open access, but no explicit licence statement was located for the atlas or the supplementary tables (checked 2026-07-29). Ingested and credited, not republished."
+
+[citation]
+status = "verified"
+text = """\
+Corcoran M, Narang S, Kaduk M, Chernyshev M, Färnert A, Sundling C, Karlsson Hedestam GB. \
+Ultra-high-throughput IGH genotyping of 25 global populations reveals population-biased \
+allelic diversity and homozygous V and D gene deletions. Immunity. 2026;59(4):1107-1122.e5."""
+doi = "10.1016/j.immuni.2026.01.026"
+pmid = "41844150"
+note = "KIARVA is the name of the atlas, not of an author. This source was previously credited to 'Kirsanov et al.' with DOI 10.1016/j.immuni.2026.01.012 — a wrong attribution and a wrong identifier (that DOI resolves to an unrelated macrophage paper). Corrected 2026-07-29 against PubMed 41844150, which introduces KIARVA by name. The local input workbook is still filed under kirsanov_2026_immunity_mmc3.xlsx; the filename is not evidence of authorship."
+
+[scope]
+species = ["HUMAN"]
+loci = ["IGH"]
+segments = ["V", "D", "J"]
+categories = ["coding"]
+
+[ingest]
+module = "allele_server.ingest.ki_xlsx"
+published = true
+note = "Loaded from the article's supplementary workbook."
+
+[approval]
+candidate = "manual:kiarva"
+approved_by = "Ayelet Peres"
+approved_at = 2026-07-29T00:00:00Z
+note = "Pre-existing source, retro-approved during the source-policy migration. Citation expanded from a bare DOI; see the citation note for an unresolved conflict between the recorded DOI and the paper that names KIARVA."
