@@ -28,6 +28,9 @@ from ..settings import get_settings
 
 server = MCPServer("allele-server")
 
+# Mirrors routes._IDENTITY_CAP; hashing is cheap, the batched lookup is not free.
+_IDENTITY_CAP = 500
+
 
 def _dump(model: Any) -> Any:
     """Pydantic model (or list of them) -> JSON-ready plain data."""
@@ -93,6 +96,42 @@ def resolve_sequence(sequence: str, species: str | None = None) -> dict:
     resolver as ``resolve_allele`` — kind is auto-detected from the input.
     """
     return _resolve(sequence, species)
+
+
+@server.tool()
+def identify_sequences(
+    sequences: list[str],
+    species: str | None = None,
+    category: str = "coding",
+    segment: str | None = None,
+) -> dict:
+    """Give sequences a stable identifier and say which ones AIRBabel already holds.
+
+    For a germline set this database may *not* have: each sequence comes back with
+    its canonical hash, the UID AIRBabel would assign, and whether we hold it.
+    Use it to reconcile an external reference set against AIRBabel by sequence
+    rather than by name, or to ask "which of these alleles are already known?".
+
+    ``sequence_hash`` is sha256 of the normalised sequence and carries no species,
+    category or name, so another set can compute the same value independently.
+    ``uid`` embeds species and category, so pass ``species`` (and ``segment``,
+    V/D/J/C, when ``category`` is coding) or it comes back null. Nothing is
+    written. Unlike minting offline, the UID is checked against the records that
+    exist, so a taken prefix yields the longer UID this database would really use.
+    """
+    from ..api.schemas import IdentityQuery
+
+    if not sequences:
+        raise ValueError("no sequences submitted")
+    if len(sequences) > _IDENTITY_CAP:
+        raise ValueError(
+            f"{len(sequences)} sequences submitted; the cap is {_IDENTITY_CAP}."
+        )
+    items = [IdentityQuery(id=str(i), sequence=s) for i, s in enumerate(sequences)]
+    with session_scope() as session:
+        return _dump(queries.identify_sequences(
+            session, items, species=species, category=category, segment=segment,
+        ))
 
 
 @server.tool()

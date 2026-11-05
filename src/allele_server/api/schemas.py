@@ -452,3 +452,53 @@ class SequenceSearchRequest(BaseModel):
 
 class AaSearchRequest(BaseModel):
     sequence_aa: str
+
+
+class IdentityQuery(BaseModel):
+    """One sequence to identify. ``id`` is echoed back so a caller can map a
+    result to its own label (a FASTA header, their own allele name)."""
+
+    id: str | None = None
+    sequence: str
+
+
+class IdentityRequest(BaseModel):
+    sequences: list[IdentityQuery]
+
+
+class IdentityResult(BaseModel):
+    """The identity of one submitted sequence, whether or not we hold it.
+
+    ``sequence_hash`` is the federation key: ``sha256`` of the normalised
+    sequence, independent of species, category and name, so two databases can
+    compute it separately and compare. ``uid`` is the AIRBabel label built from
+    that hash plus species and category, so it needs both and is not derivable
+    from the sequence alone.
+    """
+
+    id: str | None = None
+    sequence_hash: str | None = None
+    length: int | None = None
+    uid: str | None = Field(
+        None,
+        description="The UID AIRBabel would use. Null when species (or, for "
+        "coding, segment) was not supplied, or when the sequence is unusable.",
+    )
+    known: bool = Field(
+        False, description="True when this exact sequence is already in AIRBabel.",
+    )
+    matches: list[SearchHit] = Field(
+        [],
+        description="The records holding this sequence. Can be more than one: "
+        "the same sequence may be attested in several species.",
+    )
+    error: str | None = Field(
+        None, description="Why this sequence could not be identified; the rest "
+        "of the batch is unaffected.",
+    )
+
+
+class IdentityResults(BaseModel):
+    count: int
+    known: int = Field(description="How many of the submitted sequences we hold.")
+    results: list[IdentityResult] = []

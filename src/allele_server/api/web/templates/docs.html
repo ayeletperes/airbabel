@@ -371,11 +371,62 @@ worked examples.</p>
       <tr><td><span class="method">GET</span> <code>/api/search/name?q=&lt;term&gt;</code></td><td>Fuzzy name search. Optional <code>&amp;species=</code> (any species tag, comma-separated; omit for all).</td></tr>
       <tr><td><span class="method post">POST</span> <code>/api/search/sequence</code></td><td>Nucleotide similarity search. JSON body <code>{"sequence": "..."}</code>.</td></tr>
       <tr><td><span class="method post">POST</span> <code>/api/search/aa</code></td><td>Amino-acid search. JSON body <code>{"sequence_aa": "..."}</code>.</td></tr>
+      <tr><td><span class="method post">POST</span> <code>/api/identity</code></td><td>Identify sequences AIRBabel may <b>not</b> have: canonical hash, the UID we would assign, and whether we already hold each one. Up to 500 per request. See <a href="#identity">identifying your own set</a>.</td></tr>
       <tr><td><span class="method">GET</span> <code>/version</code></td><td>Software version <b>and</b> the stamped dataset release: content digest, distance-computation digest, counts, source versions. See <a href="#release">release &amp; citing</a>.</td></tr>
       <tr><td><span class="method">GET</span> <code>/healthz</code></td><td>Liveness probe.</td></tr>
     </tbody>
   </table>
 </div>
+
+<h2 id="identity">Identifying your own germline set</h2>
+<p>If you maintain your own reference set, <code>/api/identity</code> gives every sequence
+   in it a stable identifier <b>whether or not AIRBabel holds it</b>, and tells you which
+   ones we already have. That is the way to reconcile two sets without first agreeing on
+   nomenclature: compare sequences, not names.</p>
+
+<p>Two identifiers come back, and the difference matters:</p>
+<ul>
+  <li><b><code>sequence_hash</code></b> &mdash; <code>sha256</code> of the normalised
+      sequence. It carries no species, category or name, so you can compute it yourself
+      and get the same value we do. This is the key to join on.</li>
+  <li><b><code>uid</code></b> &mdash; the AIRBabel label, built from that hash <i>plus</i>
+      species and category, so it needs both and cannot be derived from the sequence
+      alone. Supply <code>species</code>, and for <code>category=coding</code> a
+      <code>segment</code>, or it comes back null.</li>
+</ul>
+
+<div class="ex">
+  <pre class="cmd"><span class="c"># one sequence we hold, one we do not</span>
+curl -X POST "<span class="host"></span>/api/identity?species=human&amp;category=coding&amp;segment=V" \
+  -H "content-type: application/json" \
+  -d '{"sequences": [{"id": "mine-1", "sequence": "CAGGTGCAGCTGGTGCAGTCTGGGGCTGAGGTGAAGAAGCCTGGGTCCTCGGTGAAGGTCTCCTGCAAGGCTTCTGGAGGCACCTTCAGC"},
+                     {"id": "mine-2", "sequence": "ACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTAC"}]}'</pre>
+  <div class="io-label">Response</div>
+  <pre class="out">{
+  "count": 2,
+  "known": 1,
+  "results": [
+    { "id": "mine-1", "sequence_hash": "9f2c…", "length": 90,
+      "uid": "HUMAN-VEQGFHKOW", "known": true,
+      "matches": [ { "uid": "HUMAN-VEQGFHKOW", "label": "IGHV1-69*21"<span class="e">, …</span> } ] },
+    { "id": "mine-2", "sequence_hash": "4b71…", "length": 90,
+      "uid": "HUMAN-V3TQKM2PL", "known": false, "matches": [] }
+  ]
+}</pre>
+</div>
+
+<p><code>id</code> is echoed back untouched, so a FASTA header or your own allele name
+   maps straight onto the result. A sequence that cannot be read reports its own
+   <code>error</code> and leaves the rest of the batch alone.</p>
+
+<p class="hint"><b>You do not need this endpoint to mint the identifiers.</b> The hash is
+   <code>sha256</code> of the normalised sequence &mdash; uppercased, gaps stripped, IUPAC
+   validated &mdash; and both the normalisation and the UID construction are in the public
+   source (<code>allele_server/sequence.py</code> and <code>uid.py</code>), so you can
+   compute identical values offline with no dependency on this service. What the endpoint
+   adds is the <code>known</code> answer, and a UID checked against the records that exist:
+   where an 8-character UID is already taken by a different sequence, the real one is
+   longer, and only the database knows that.</p>
 
 <h2 id="mcp">Using AIRBabel from an AI assistant (MCP)</h2>
 <p>AIRBabel is also a public <a href="https://modelcontextprotocol.io" target="_blank" rel="noopener">Model Context Protocol</a> server, so an AI assistant such as Claude can query it directly while you work. No account or key is needed.</p>

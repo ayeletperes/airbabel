@@ -20,6 +20,8 @@ from .schemas import (
     AlignmentView,
     AlleleDescription,
     DiffSummary,
+    IdentityRequest,
+    IdentityResults,
     OrthologHint,
     PmidResult,
     ResolveResult,
@@ -395,6 +397,51 @@ def search_sequence(
                 functional=functional, source=source,
             )
     except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+_IDENTITY_CAP = 500
+
+
+@router.post("/api/identity")
+def identity(
+    body: IdentityRequest,
+    species: str | None = Query(
+        None,
+        description="One species (human, Homo sapiens, HUMAN). Required to mint a "
+        "UID, because the UID embeds it; the sequence_hash does not and is "
+        "returned either way.",
+    ),
+    category: str = Query("coding", pattern="^(coding|leader|rss)$"),
+    segment: str | None = Query(
+        None,
+        description="V/D/J/C. Required with category=coding, since the segment "
+        "letter is part of the UID. Ignored for leader and rss.",
+    ),
+    session: Session = Depends(get_session),
+) -> IdentityResults:
+    """Identify submitted sequences: their canonical hash, the UID AIRBabel would
+    give them, and whether we already hold them.
+
+    For sequences this database does **not** have. `sequence_hash` is
+    `sha256` of the normalised sequence and carries no species, category or
+    name, so another germline set can compute the same value independently and
+    the two can be compared without agreeing on nomenclature first.
+    """
+    if not body.sequences:
+        raise HTTPException(status_code=422, detail="no sequences submitted")
+    if len(body.sequences) > _IDENTITY_CAP:
+        raise HTTPException(
+            status_code=422,
+            detail=f"{len(body.sequences)} sequences submitted; the cap is "
+                   f"{_IDENTITY_CAP} per request.",
+        )
+    try:
+        return queries.identify_sequences(
+            session, body.sequences, species=species, category=category,
+            segment=segment,
+        )
+    except ValueError as exc:  # SpeciesError subclasses ValueError
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 

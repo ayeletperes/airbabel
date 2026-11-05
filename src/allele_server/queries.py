@@ -31,6 +31,8 @@ from .api.schemas import (
     AlignmentView,
     ArchivedMatch,
     DiffSummary,
+    IdentityResult,
+    IdentityResults,
     NativeRecord,
     NeighbourDiff,
     NtSub,
@@ -66,6 +68,7 @@ from .sequence import (
     _CODON_TABLE,
     hash_aa,
     hash_sequence,
+    normalize,
     reverse_complement_hash,
 )
 from .settings import get_settings
@@ -1959,8 +1962,6 @@ def search_by_sequence(
     sub/superstring, and edit-distance ranking. ``partial=True`` scores by local
     (best-window) identity so a truncated query matches its allele near 100%.
     ``locus`` restricts the search to one chain (IGH/IGK/IGL/TRA/...)."""
-    from .sequence import normalize
-
     try:
         norm = normalize(seq_str)
     except SequenceError as exc:
@@ -2000,6 +2001,81 @@ def search_by_sequence(
     return _mark_superseded(session, SearchResults(
         query=f"<{len(norm)} nt>", count=len(hits), capped=len(ranked) > cap, hits=hits
     ))
+
+
+def identify_sequences(
+    session: Session, items, species: str | None = None,
+    category: str = "coding", segment: str | None = None,
+) -> IdentityResults:
+    """Hash submitted sequences, mint their UIDs, and say which we already hold.
+
+    The point is identity for sequences AIRBabel does *not* have: a group with
+    its own germline set can key on the same identifier we do, then ask which of
+    their sequences we already know and under which names. Nothing is written —
+    minting is a pure function of the sequence plus species and category.
+
+    ``sequence_hash`` carries no species or category, so it federates; ``uid``
+    needs both and is omitted when ``species`` is not given. Minting goes through
+    the same collision check the ingest uses, so a returned UID is the one this
+    database would assign rather than a hopeful default-length guess — which is
+    the reason to ask the server instead of computing it offline.
+    """
+    from .uid import Category, UidError, mint_uid
+
+    tag = normalize_species(species) if species else None  # raises on unknown
+    try:
+        cat = Category(category)
+    except ValueError as exc:
+        raise ValueError(f"unknown category {category!r}") from exc
+
+    def uid_exists(uid: str) -> str | None:
+        return session.scalar(select(Sequence.sequence_hash).where(Sequence.uid == uid))
+
+    results: list[IdentityResult] = []
+    digests: dict[str, list[int]] = {}
+    for i, item in enumerate(items):
+        try:
+            norm = normalize(item.sequence)
+            digest = hash_sequence(item.sequence)
+        except SequenceError as exc:
+            results.append(IdentityResult(id=item.id, error=str(exc)))
+            continue
+        uid = None
+        if tag is not None:
+            try:
+                uid = mint_uid(tag, cat, segment, digest, uid_exists)
+            except UidError as exc:
+                # A coding UID without a segment is the common case here, and it is
+                # a bad request rather than a bad sequence: still return the hash,
+                # which is the half that does not depend on what the caller omitted.
+                results.append(IdentityResult(
+                    id=item.id, sequence_hash=digest, length=len(norm), error=str(exc),
+                ))
+                continue
+        results.append(IdentityResult(
+            id=item.id, sequence_hash=digest, length=len(norm), uid=uid,
+        ))
+        digests.setdefault(digest, []).append(i)
+
+    # One query for the whole batch rather than one per sequence: the caller is
+    # identifying a germline set, not a single allele.
+    if digests:
+        stmt = _visible_seqs(select(Sequence).where(
+            Sequence.sequence_hash.in_(list(digests)),
+            Sequence.category == category,
+            Sequence.archived.is_(False),
+        ))
+        sp_cond = _species_cond(_species_tags(species))
+        if sp_cond is not None:
+            stmt = stmt.where(sp_cond)
+        for seq in session.scalars(stmt):
+            for i in digests.get(seq.sequence_hash, ()):
+                results[i].matches.append(_hit(session, seq, 1.0, "exact"))
+                results[i].known = True
+
+    return IdentityResults(
+        count=len(results), known=sum(1 for r in results if r.known), results=results,
+    )
 
 
 def search_by_aa(
