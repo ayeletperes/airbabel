@@ -202,7 +202,10 @@ def create_app() -> FastAPI:
         prefix = {"coding": "/seq/", "rss": "/rss/", "leader": "/leader/"}
 
         def build() -> str:
-            paths = ["/", "/overview", "/sources", "/examples", "/tutorial", "/help"]
+            paths = ["/", "/overview", "/sources", "/examples", "/tutorial", "/help",
+                     "/records"]
+            paths += [f"/records/{sp}/{cat}/{key}"
+                      for sp, cat, key in queries.record_groups(session)]
             paths += [prefix[cat] + uid for uid, cat in queries.sitemap_uids(session)
                       if cat in prefix]
             # 50,000 URLs is the protocol's per-file limit; split into an index past it.
@@ -513,6 +516,33 @@ def create_app() -> FastAPI:
             {"sources": queries.source_catalog(session),
              "release": queries.dataset_release(session),
              "attribution": export.ATTRIBUTION},
+        )
+
+    # Browse index: a crawl path from the site into every record page, grouped by
+    # species, category, locus and segment (sequence metadata). Never by name: names
+    # are labels, and organising pages by them contradicts the resource.
+    @app.get("/records", response_class=HTMLResponse)
+    def records_index(request: Request, session: Session = Depends(get_session)):
+        groups = _cached("record_groups", session, lambda: queries.record_groups(session))
+        by_species: dict[str, list[tuple[str, str, int]]] = {}
+        for (sp, cat, key), uids in sorted(groups.items()):
+            by_species.setdefault(sp, []).append((cat, key, len(uids)))
+        return _TEMPLATES.TemplateResponse(
+            request, "records.html", {"by_species": by_species, "uids": None},
+        )
+
+    @app.get("/records/{species}/{category}/{key}", response_class=HTMLResponse)
+    def records_group(request: Request, species: str, category: str, key: str,
+                      session: Session = Depends(get_session)):
+        groups = _cached("record_groups", session, lambda: queries.record_groups(session))
+        uids = groups.get((species, category, key))
+        if not uids:
+            raise HTTPException(status_code=404, detail="no such record group")
+        prefix = {"coding": "/seq/", "rss": "/rss/", "leader": "/leader/"}[category]
+        return _TEMPLATES.TemplateResponse(
+            request, "records.html",
+            {"species": species, "category": category, "key": key,
+             "uids": uids, "prefix": prefix},
         )
 
     @app.get("/seq/{uid}", response_class=HTMLResponse)

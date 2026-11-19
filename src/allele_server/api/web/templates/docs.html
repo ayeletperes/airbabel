@@ -439,12 +439,26 @@ curl -X POST "<span class="host"></span>/api/identity?species=human&amp;category
     <tbody>
       <tr><td><code>resolve_allele</code></td><td>Resolve an allele name, UID or protein UID to its record. Pass <code>species</code> to pin a name reused across species.</td></tr>
       <tr><td><code>resolve_sequence</code></td><td>Resolve a nucleotide or amino-acid sequence to its record, by sequence identity.</td></tr>
+      <tr><td><code>identify_sequences</code></td><td>Identify a batch of sequences AIRBabel may <b>not</b> have: hash, the UID we would assign, and which ones we already hold. See <a href="#identity">identifying your own set</a>.</td></tr>
       <tr><td><code>get_aliases</code></td><td>Every name a sequence carries, with its naming scheme and source.</td></tr>
       <tr><td><code>find_similar</code></td><td>Nearest alleles by nucleotide or amino-acid identity.</td></tr>
       <tr><td><code>get_cross_species_neighbors</code></td><td>Nearest alleles in other species (a sequence signal, not a curated orthology call).</td></tr>
     </tbody>
   </table>
 </div>
+<p>Then ask in ordinary language. The assistant picks the tool:</p>
+<ul>
+  <li>&ldquo;What is <code>IGHV1-69*01</code>, and what other names does it carry?&rdquo;</li>
+  <li>&ldquo;Here are 40 human TRBV leader sequences. Which ones does AIRBabel already
+      have, and what identifier would the rest get?&rdquo;</li>
+  <li>&ldquo;This sequence is not in our reference set. Is it known, and if not, what is
+      the closest allele?&rdquo;</li>
+</ul>
+<p>The last two are worth pairing: <code>identify_sequences</code> says which of your
+   sequences are known, and <code>find_similar</code> then explains the ones that are
+   not. Doing that over a whole set is what the assistant route is good for; for bulk
+   work the <a href="#identity">REST endpoint</a> has a larger budget, since an MCP
+   request body is capped at 1&nbsp;MB.</p>
 <p class="muted">The server runs on a small shared instance, so requests are rate-limited, with a tighter limit on the two similarity tools. Name and sequence lookups are not affected by the similarity limit.</p>
 
 <h2 id="examples">Examples</h2>

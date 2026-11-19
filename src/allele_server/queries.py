@@ -145,6 +145,26 @@ def sitemap_uids(session: Session) -> list[tuple[str, str]]:
     return [(uid, cat) for uid, cat in session.execute(stmt)]
 
 
+def record_groups(session: Session) -> dict[tuple[str, str, str], list[str]]:
+    """Every sitemap record UID grouped by ``(species, category, locus+segment)``.
+
+    The browse index (``/records``): a crawl path into the record pages organised by
+    sequence metadata, never by name. Same rows as :func:`sitemap_uids`. Leaders and
+    RSSs carry no locus/segment, so their group key is ``"all"``.
+    """
+    stmt = _visible_seqs(
+        select(Sequence.species, Sequence.category, Sequence.locus, Sequence.segment,
+               Sequence.uid)
+        .where(Sequence.archived.is_(False))
+        .order_by(Sequence.uid)
+    )
+    groups: dict[tuple[str, str, str], list[str]] = {}
+    for sp, cat, locus, seg, uid in session.execute(stmt):
+        key = f"{locus}{seg}" if locus and seg else "all"
+        groups.setdefault((sp, cat, key), []).append(uid)
+    return groups
+
+
 def _unshelved_names(stmt):
     """Add the shelved-name exclusion to a stmt that joins :class:`Name`.
 
